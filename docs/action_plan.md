@@ -909,9 +909,30 @@ endpoint).
   enabling half of productization deployment profiles (pairs with OPS-35; Domovoy arc / PROD-4
   direction).
 
-- [ ] **CORE-14** `[P1]` — **Boot race: MQTT connect-timeout skips WB emulation + scenario cards
+- [~] **CORE-14** `[P1]` `HW-GATED` — **Boot race: MQTT connect-timeout skips WB emulation + scenario cards
   PERMANENTLY — move their setup onto the on-connect callback** (filed 2026-08-02 off the
   power-outage incident investigation; live evidence in `service.log.20260801.log` on the WB7).
+  **CODE HALF LANDED 2026-08-02 (same session).** Shipped: `make_wb_cards_publisher`
+  (`app/bootstrap.py`, module-level for testability) — WB device cards + scenario cards move
+  into a ONE-SHOT on-connect callback; bootstrap registers it on the client and also calls it
+  directly when the boot connect already happened, gated on the LIVE `mqtt_client.connected`
+  flag (not the wait's snapshot — a connect can land between the 30 s wait timing out and
+  registration). The wait itself stays (normal-boot ordering: cards before uvicorn serves) but
+  a timeout now defers with a WARNING instead of skipping. One-shot by DESIGN: setup publishes
+  config-derived initial control values, so re-running on later reconnects would clobber live
+  values — consequence: a mid-run broker restart still wipes the cards without healing (only
+  the catalog version self-heals, VWB-32); explicit non-goal here, file a follow-up if it ever
+  bites (the heal needs current-state value republish — the never-wired
+  `WBVirtualDeviceService.handle_mqtt_reconnection` republishes metas only). Secondary
+  DECIDED: failed driver init at boot (the Broadlink `Errno 101`) gets NO retry trigger from
+  this task — stays OPS-18 offline-marking + manual `/reload`. 5 new tests
+  (`test_wb_cards_on_connect.py`: latch, containment ×2, fire-time adapter resolution,
+  lost-race end-to-end through the reconnect-loop harness); suite 752, pyright 0, contracts
+  6/6, openapi golden byte-identical; `arch/overview` startup sequence re-truthed same change.
+  **REMAINING (the HW gate): deploy current main to the WB7** (the pending op that also
+  rack-verifies CORE-1's `/reload`) **and verify cards present after the next cold boot** —
+  ideally one that loses the network race (or simulate: stop mosquitto across a bridge
+  container restart, start it >30 s later, confirm cards appear on connect).
   The 2026-08-01 cold boot brought the container up before the host network: bootstrap's 30 s
   wait for MQTT timed out at 08:01:39 UTC (`WB emulation will be skipped` + `scenario WB cards
   skipped`), then connect attempt 5/5 SUCCEEDED at 08:02:00 — 20 s too late. Everything

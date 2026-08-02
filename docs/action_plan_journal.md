@@ -28,6 +28,28 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-08-02 — CORE-14 code half: WB cards publish on first connect (task stays open,
+  HW-gated).** Same-day turnaround on the power-outage incident: the 2026-08-01 cold boot
+  lost the race to the host network — bootstrap's 30 s MQTT wait timed out and the old
+  connect-or-skip gate dropped WB emulation + scenario cards permanently, while connect
+  attempt 5/5 landed 20 s later (house symptom: the kitchen-hood wb-rule writing into an
+  unexisting `kitchen_hood/set_light` control; the persistence-less broker had wiped every
+  retained card at boot). Card publishing now lives in a one-shot on-connect callback
+  (`make_wb_cards_publisher`): registered on the client AND called directly when the boot
+  connect already happened — gated on the LIVE connected flag, not the wait's snapshot,
+  so a connect landing between the timeout and registration is covered; the latch makes
+  later invocations no-ops (setup publishes config-derived initial values — re-running on
+  reconnects would clobber live state, so a mid-run broker restart still wipes cards
+  by design; only the catalog version self-heals per VWB-32 — recorded as an explicit
+  non-goal). Decision recorded on the task's secondary: failed driver init at boot (the
+  Broadlink `Errno 101`) gets no retry trigger — stays OPS-18 offline-marking + `/reload`.
+  The same investigation caught the deployed 07-15 image's `/reload` restoring no cards
+  (`set_runtime_services(mqtt_client=...)` nulls `wb_service` — CORE-1's gap (4), already
+  fixed on main). 5 new tests incl. a lost-race end-to-end through the reconnect-loop
+  harness; suite 752, pyright 0, contracts 6/6, openapi golden byte-identical; the
+  architecture overview's startup sequence re-truthed. Close waits on deploying main to
+  the WB7 (the op that also rack-verifies CORE-1) + a cold-boot verify.
+
 - **2026-07-20 — UI-21 filed: the main-UI wireframe/layout session (the PROD-10 deferred
   filing discharged).** The owner asked where the bridge's UI-redesign task was — the answer:
   nowhere, by design. PROD-10 stage ② recorded "bridge files it at that session's intake

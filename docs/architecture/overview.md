@@ -108,7 +108,11 @@ A small set of conventions keeps the hexagon working — none of them are aspira
    config (a device that fails `setup()` is kept registered as disconnected, not
    dropped), attaches per-device capability maps, and injects the SSE
    `EventPublisherPort`.
-5. Connect MQTT + subscribe each device's topics. Set up per-device WB emulation.
+5. Connect MQTT + subscribe each device's topics. WB virtual-device cards (per-device
+   emulation plus the scenario cards) publish as soon as the connection is up — if the
+   broker isn't reachable yet at startup (e.g. the network is still coming up after a
+   power cut), they publish automatically on the first successful connect instead of
+   being skipped.
 6. Initialise `RoomManager` (derives membership from the device fleet) and
    `ScenarioManager` (loads `config/scenarios/*.json`, attaches the reconciler).
 7. Inject dependencies into the routers; install the OpenAPI override that adds the

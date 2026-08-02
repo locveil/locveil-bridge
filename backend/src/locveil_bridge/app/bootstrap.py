@@ -212,6 +212,47 @@ async def _release_partial_startup(
             log.warning(f"Startup-failure cleanup: state store close failed: {e}")
 
 
+def make_wb_cards_publisher(
+    device_manager: DeviceManager,
+    get_scenario_adapter: Callable[[], ScenarioWBAdapter],
+) -> Callable[[], Any]:
+    """One-shot publisher of the WB device cards + scenario cards (CORE-14).
+
+    Returned coroutine function is registered as an MQTT on-connect callback AND
+    called directly when the boot connect already happened — whichever runs first
+    wins, the latch makes every later invocation a no-op. One-shot, unlike the
+    VWB-32 catalog callback: card setup publishes config-derived initial control
+    values, so re-running on a later reconnect would clobber live values with
+    defaults. The latch is safe against the client loop's callback firing
+    concurrently with the direct call — check-and-set with no await in between,
+    single event loop. ``get_scenario_adapter`` is resolved at fire time so a
+    /reload's adapter swap (nonlocal rebind) is honored.
+    """
+    published = False
+
+    async def _publish_wb_cards_once() -> None:
+        nonlocal published
+        if published:
+            return
+        published = True
+        from locveil_bridge.infrastructure.devices.base import BaseDevice as _BaseDevice  # local: keep domain/ import-pure
+        logger = logging.getLogger(__name__)
+        logger.info("Setting up Wirenboard virtual device emulation...")
+        for device_id, port_device in device_manager.devices.items():
+            device = cast(_BaseDevice, port_device)
+            try:
+                await device.setup_wb_emulation_if_enabled()
+                logger.debug(f"WB emulation setup completed for device {device_id}")
+            except Exception as e:
+                logger.error(f"Failed to setup WB emulation for device {device_id}: {str(e)}")
+        try:
+            await get_scenario_adapter().setup()
+        except Exception as e:
+            logger.error(f"Failed to set up scenario WB cards: {str(e)}")
+
+    return _publish_wb_cards_once
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     
@@ -388,24 +429,22 @@ def create_app() -> FastAPI:
                     handler_map[topic] = handler
             await mqtt_client.connect_and_subscribe(handler_map)
         
-            # Wait for MQTT connection to be fully established
+            # Wait for MQTT so the normal boot publishes WB cards before uvicorn
+            # serves. A timeout is no longer terminal (CORE-14): card publishing
+            # lives in a one-shot on-connect callback registered below, so a boot
+            # that loses the race to the host network (power-outage cold boot: the
+            # broker's LAN IP doesn't exist until the interface is up) publishes
+            # on whichever connect attempt eventually lands.
             logger.info("Waiting for MQTT connection to be established...")
             connection_success = await mqtt_client.wait_for_connection(timeout=30.0)
-            if not connection_success:
-                logger.error("Failed to establish MQTT connection within timeout - WB emulation will be skipped")
-            else:
+            if connection_success:
                 logger.info("MQTT connection established successfully")
-            
-                # Now that MQTT is connected, set up Wirenboard virtual device emulation for all devices
-                logger.info("Setting up Wirenboard virtual device emulation...")
-                for device_id, port_device in device_manager.devices.items():
-                    device = cast(_BaseDevice, port_device)
-                    try:
-                        await device.setup_wb_emulation_if_enabled()
-                        logger.debug(f"WB emulation setup completed for device {device_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to setup WB emulation for device {device_id}: {str(e)}")
-        
+            else:
+                logger.warning(
+                    "MQTT connection not established within timeout - WB virtual cards "
+                    "will be published on first connect"
+                )
+
             # Initialize room manager (after devices are loaded)
             room_manager = RoomManager(Path(config_manager.config_dir), device_manager)
         
@@ -425,13 +464,21 @@ def create_app() -> FastAPI:
             # entity as a «Сценарии» card and keeps its value topic tracking the room slot.
             scenario_proxy = ScenarioProxy(scenario_manager, device_manager)
             scenario_wb_adapter = ScenarioWBAdapter(scenario_proxy, wb_service, mqtt_client)
-            if connection_success:
-                try:
-                    await scenario_wb_adapter.setup()
-                except Exception as e:
-                    logger.error(f"Failed to set up scenario WB cards: {str(e)}")
-            else:
-                logger.warning("MQTT not connected - scenario WB cards skipped")
+
+            # CORE-14: WB device cards + scenario cards publish from a ONE-SHOT
+            # on-connect callback instead of a connect-or-skip gate (see
+            # make_wb_cards_publisher). The adapter is resolved lazily so a
+            # /reload's rebind of `scenario_wb_adapter` is honored.
+            publish_wb_cards_once = make_wb_cards_publisher(
+                device_manager, lambda: scenario_wb_adapter
+            )
+            mqtt_client.on_connect_callbacks.append(publish_wb_cards_once)
+            # Direct call for the boot that won the race (the first connect
+            # already fired its callbacks before this registration). Gate on the
+            # LIVE flag, not the `connection_success` snapshot — the connect may
+            # have landed between the wait timing out and this line.
+            if mqtt_client.connected:
+                await publish_wb_cards_once()
 
             # SSE observer on the activation chokepoint: EVERY path (REST, canonical
             # scenario.set, restore, deactivate) notifies the scenarios channel, so an
