@@ -909,6 +909,33 @@ endpoint).
   enabling half of productization deployment profiles (pairs with OPS-35; Domovoy arc / PROD-4
   direction).
 
+- [ ] **CORE-14** `[P1]` — **Boot race: MQTT connect-timeout skips WB emulation + scenario cards
+  PERMANENTLY — move their setup onto the on-connect callback** (filed 2026-08-02 off the
+  power-outage incident investigation; live evidence in `service.log.20260801.log` on the WB7).
+  The 2026-08-01 cold boot brought the container up before the host network: bootstrap's 30 s
+  wait for MQTT timed out at 08:01:39 UTC (`WB emulation will be skipped` + `scenario WB cards
+  skipped`), then connect attempt 5/5 SUCCEEDED at 08:02:00 — 20 s too late. Everything
+  connect-driven recovered (subscriptions, the VWB-32 on-connect catalog republish), but the WB
+  virtual cards + scenario cards publish exactly ONCE at bootstrap behind that gate — and since
+  the in-box mosquitto runs without persistence (deliberate, see wb7 deployment notes), the boot
+  wiped every retained bridge card with nothing to repopulate them. Symptom: wb-rules logged
+  `failed to SetValue for unexisting control kitchen_hood/set_light` on every switch press (the
+  «Kitchen Light Switch Control» rule) — the house-visible break. Any cold power-on can
+  reproduce this: the bridge's MQTT client targets the LAN IP (`192.168.110.250`), which doesn't
+  exist until the interface is up, so all early attempts fail unreachable. Scope: fire
+  WB-emulation + scenario-card setup from the MQTT on-connect callback (one-shot latch — the
+  VWB-32 pattern; CORE-1's `rebuild_scenario_cards` hook is already connect-ordered on the
+  reload path) instead of the one-shot 30 s bootstrap gate; a bigger timeout only shrinks the
+  window. Same-boot secondary: the kitchen_hood Broadlink driver init failed (`[Errno 101]
+  Network is unreachable`) and the device sat `connection_status: error` until reload — decide
+  whether failed-setup devices get a retry trigger here, or whether that stays OPS-18
+  offline-marking + manual `/reload`. NB `/reload` is NOT a recovery hatch on the deployed
+  07-15 image: the 2026-08-02 live reload restored no cards — the old inline router calls
+  `set_runtime_services(mqtt_client=...)` which resets `wb_service` to `None`, so per-device
+  emulation setup silently skips publishing (exactly CORE-1's gap (4), fixed on main by the
+  `ReloadService` extraction). Deploying current main is the companion op — and doubles as
+  CORE-1's pending rack verify of `POST /reload`.
+
 ### LIB — pymotivaxmc2 library (sibling repo)
 
 Fixes to the owner-maintained **`../pymotivaxmc2`** library (PyPI, pinned `==0.7.0` in
