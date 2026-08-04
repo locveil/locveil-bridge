@@ -28,6 +28,24 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-08-04 (later) — CORE-1's `/reload` rack verify RAN: mechanics pass, and the verify
+  earned its keep — two P1 findings filed (CORE-15/CORE-16).** `POST /reload` on the deployed
+  image drove the full ReloadService sequence clean (reconnect, all 14 WB cards + the
+  `scenario_manager_living_room` card rebuilt, catalog republished, no reload-path errors) —
+  but the catalog came back `95e24c…`, not golden, and the diff told the real story: ALL 79
+  devices' `capabilities` were EMPTY post-reload, canonical answered `capability_not_supported`
+  fleet-wide (voice actuation dead until restart). Root cause **CORE-15**: `/reload` never
+  re-runs `attach_capability_maps` after re-initializing the fleet — a pre-existing omission
+  the CORE-1 verbatim extraction faithfully preserved (the OLD image produced the identical
+  hash on 08-02; the earlier journal attribution of `95e24c…` to "old-image catalog code" was
+  wrong — superseded here). Heal verified: container restart → golden + 157 capabilities.
+  **CORE-16** fell out of the simulation prep: the boot-time connect loop gives up PERMANENTLY
+  after 5 attempts (~50 s) — the 08-01 boot survived on attempt 5/5 by luck; 20 more seconds
+  of network delay = MQTT dead with the healthcheck green (HTTP-only probe). The CORE-14
+  lost-race simulation itself is PENDING: the harness declined to stop the production broker
+  (correctly — whole-house disturbance is the owner's hand), choreography handed to the owner.
+  CORE-1's close = owner's call; its one failing gate item re-verifies with CORE-15's fix.
+
 - **2026-08-04 — the power-outage incident CLOSED: main deployed on the WB7, kitchen-hood
   rule verified live.** The owner deployed current main 2026-08-02 (~10 min after the
   dispatched image build went green) and confirmed the «Kitchen Light Switch Control» rule
