@@ -28,6 +28,19 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-08-04 — the power-outage incident CLOSED: main deployed on the WB7, kitchen-hood
+  rule verified live.** The owner deployed current main 2026-08-02 (~10 min after the
+  dispatched image build went green) and confirmed the «Kitchen Light Switch Control» rule
+  working; verified from the dev box 2026-08-04: `kitchen_hood/set_light` retained with full
+  meta, clean `Rule triggered` firings with zero `unexisting control` errors since the deploy
+  (surviving wb-rules' own midnight restart), and `bridge/catalog/version` back to the golden
+  `5622ba7a1a78102a` — the `95e24c…` value seen after the 2026-08-02 old-image reload was that
+  image's catalog code, not config drift. CORE-14's gate narrows to the race-fix verify (next
+  cold boot, or the mosquitto-stop simulation at the owner's convenience); CORE-1's `/reload`
+  rack verify is now unblocked (the ReloadService code is live — the 08-02 reload attempt ran
+  on the old image and does not count). Side observation, not filed: wb-rules warns `Unknown
+  metadata for device kitchen_hood: 'online'/'available'` at its restarts — cosmetic.
+
 - **2026-08-02 — CORE-14 code half: WB cards publish on first connect (task stays open,
   HW-gated).** Same-day turnaround on the power-outage incident: the 2026-08-01 cold boot
   lost the race to the host network — bootstrap's 30 s MQTT wait timed out and the old

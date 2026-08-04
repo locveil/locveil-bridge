@@ -861,7 +861,11 @@ endpoint).
   old adapter is unreferenced and collects). Connection-timeout path skips it, same as boot.
   **REMAINING (the HW gate): rack verify `POST /reload`** — reconnects cleanly against the live
   broker, devices command OK after, WB cards + **scenario «Сценарии» cards** + catalog version topic
-  correct. Close only on owner confirmation. Item A: `POST /reload`'s `reload_system_task` constructs + drives a concrete `MQTTClient` inline; extract an application-layer reload service (e.g. `app/reload_service.py`) so the router stays a thin adapter. **Gated on hardware** — touches the live MQTT-reconnect path; can't be safely HW-verified without you at the rack. **Completion goal = 100% clean hexagon (explicit, added 2026-07-07):** this task owns the **only** `ignore_imports` exception in the import-linter config (`presentation.api.routers.system -> infrastructure.mqtt.client`, backend `pyproject.toml`); done means (1) the reload service extracted and the back-edge gone from the code, (2) the **`ignore_imports` entry deleted** — the contract set (6 since CORE-6) passes with **zero exceptions**, (3) the "one documented exception" passages updated in `docs/architecture/overview.md` + the contract name/comment in `pyproject.toml` + the [[hexagonal-layering]] memory, (4) HW-verified at the rack: `POST /reload` still reconnects cleanly against the live broker. Item B (response DTO for `/config/system`) done in `73ee8d5` — new presentation `SystemConfigResponse` + nested DTOs; wire shape field-identical; `presentation/api/schemas.py` no longer imports the infra `SystemConfig`.
+  correct. Close only on owner confirmation. **UNBLOCKED 2026-08-02: the CORE-14 deploy put the
+  ReloadService code live on the WB7** (the old image's inline reload was caught live 2026-08-02
+  restoring no cards — exactly gap (4); that failure mode is what this verify now checks against).
+  NB the 2026-08-02 live `/reload` attempt ran on the OLD image and does NOT count — run it fresh
+  on the deployed image. Item A: `POST /reload`'s `reload_system_task` constructs + drives a concrete `MQTTClient` inline; extract an application-layer reload service (e.g. `app/reload_service.py`) so the router stays a thin adapter. **Gated on hardware** — touches the live MQTT-reconnect path; can't be safely HW-verified without you at the rack. **Completion goal = 100% clean hexagon (explicit, added 2026-07-07):** this task owns the **only** `ignore_imports` exception in the import-linter config (`presentation.api.routers.system -> infrastructure.mqtt.client`, backend `pyproject.toml`); done means (1) the reload service extracted and the back-edge gone from the code, (2) the **`ignore_imports` entry deleted** — the contract set (6 since CORE-6) passes with **zero exceptions**, (3) the "one documented exception" passages updated in `docs/architecture/overview.md` + the contract name/comment in `pyproject.toml` + the [[hexagonal-layering]] memory, (4) HW-verified at the rack: `POST /reload` still reconnects cleanly against the live broker. Item B (response DTO for `/config/system`) done in `73ee8d5` — new presentation `SystemConfigResponse` + nested DTOs; wire shape field-identical; `presentation/api/schemas.py` no longer imports the infra `SystemConfig`.
 
 - [ ] **CORE-4** `[P2]` `[deferred]` — **Full `POST /devices/{id}/action` demotion (release-2 candidate).** Decided at the release-1 sign-off (2026-07-06): `/action` ships in release 1 **as the documented internal/dev + UI-fallback door, untouched** — UI-9 removed its last first-party writer, but demoting it before the canonical hardware passes (REL-3, VWB-13) prove coverage would remove the safety net exactly when it might be needed. Post-release scope: strip the UI's un-annotated-control fallback dispatch paths, mark the endpoint internal in the OpenAPI docs (or move it under an internal prefix), and re-examine `/scenario/switch`+`/scenario/shutdown` internalization (the rest of `canonical_first.md` §8 phase 3) in the same pass.
 
@@ -942,10 +946,17 @@ endpoint).
   (`test_wb_cards_on_connect.py`: latch, containment ×2, fire-time adapter resolution,
   lost-race end-to-end through the reconnect-loop harness); suite 752, pyright 0, contracts
   6/6, openapi golden byte-identical; `arch/overview` startup sequence re-truthed same change.
-  **REMAINING (the HW gate): deploy current main to the WB7** (the pending op that also
-  rack-verifies CORE-1's `/reload`) **and verify cards present after the next cold boot** —
-  ideally one that loses the network race (or simulate: stop mosquitto across a bridge
-  container restart, start it >30 s later, confirm cards appear on connect).
+  **DEPLOY HALF DONE 2026-08-02 (owner-confirmed 2026-08-04):** current main deployed on the
+  WB7 (container restart 09:48 UTC, minutes after the image build); verified live 2026-08-04 —
+  `kitchen_hood/set_light` card retained with full meta, the «Kitchen Light Switch Control»
+  rule fires clean (zero `unexisting control` errors since, surviving wb-rules' own midnight
+  restart), and `bridge/catalog/version` is back to the golden `5622ba7a1a78102a` (the
+  `95e24c…` drift was the OLD image's catalog code — resolved by the deploy, no config issue).
+  The incident that filed this task is CLOSED. **REMAINING (the narrowed HW gate): verify the
+  race fix itself** — cards present after a cold boot that loses the network race (the next
+  power outage proves it for free, or simulate: stop mosquitto across a bridge container
+  restart, start it >30 s later, confirm cards appear on connect — disruptive to the live
+  house, owner's call on timing).
   The 2026-08-01 cold boot brought the container up before the host network: bootstrap's 30 s
   wait for MQTT timed out at 08:01:39 UTC (`WB emulation will be skipped` + `scenario WB cards
   skipped`), then connect attempt 5/5 SUCCEEDED at 08:02:00 — 20 s too late. Everything
