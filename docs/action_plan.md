@@ -839,44 +839,6 @@ endpoint).
 
 ### CORE — Backend core / architecture
 
-- [~] **CORE-1** `[P2]` `[deferred]` `HW-GATED` — **System-router adapter cleanup — Item A only (Item B DONE 2026-05-26).**
-  **CODE HALF LANDED 2026-07-19 (owner directive: implement now, close only after the device test).**
-  Shipped: `app/reload_service.py` (`ReloadService.reload()` = the former router background task,
-  verbatim sequence); the system router only schedules it (`set_reload_service` wiring seam); the
-  **`ignore_imports` exception is DELETED** — 6/6 contracts pass with an EMPTY exception list;
-  `overview.md`/`interfaces.md`/`pyproject` comment/CLAUDE.md dialect re-truthed. The extraction also
-  closed four latent reload gaps found at reconciliation: (1) the replacement client is built by a
-  bootstrap factory IDENTICAL to boot (maintenance guard + traffic observer — the inline version
-  silently lost both); (2) the rewire hook re-points ALL router globals (devices/mqtt/scenarios kept
-  publishing via the STOPPED old client); (3) the VWB-32 on-connect catalog publish is re-registered
-  on the new client; (4) a fresh `WBVirtualDeviceService` rides the swap (the old one was bound to the
-  dead client). Dead write dropped: `device_manager.config_manager = …` assigned an attribute
-  `DeviceManager` never declares or reads. 5 new tests (`test_reload_service.py`); suite 747, pyright
-  0, openapi/golden byte-identical. **Residual RETIRED same day (owner directive, pre-bench):** gap
-  (5) — `ScenarioWBAdapter` held the boot client + boot WB service — closed by a
-  `rebuild_scenario_cards` hook the service fires once the new client is CONNECTED (startup's
-  ordering): bootstrap builds a fresh adapter over the new composition and runs `setup()`, which
-  republishes the cards, re-subscribes their command topics, and re-points
-  `scenario_manager.on_active_changed` at the new adapter (the assignment displaces the old hook; the
-  old adapter is unreferenced and collects). Connection-timeout path skips it, same as boot.
-  **REMAINING (the HW gate): rack verify `POST /reload`** — reconnects cleanly against the live
-  broker, devices command OK after, WB cards + **scenario «Сценарии» cards** + catalog version topic
-  correct. Close only on owner confirmation. **UNBLOCKED 2026-08-02: the CORE-14 deploy put the
-  ReloadService code live on the WB7** (the old image's inline reload was caught live 2026-08-02
-  restoring no cards — exactly gap (4); that failure mode is what this verify now checks against).
-  NB the 2026-08-02 live `/reload` attempt ran on the OLD image and does NOT count — run it fresh
-  on the deployed image. **VERIFY RAN 2026-08-04 — mechanics PASS, one gate item FAILS on a
-  pre-existing bug now tracked as CORE-15.** PASS: ReloadService drove the full sequence against
-  the live broker (reconnect clean, all 14 WB cards + the `scenario_manager_living_room` card
-  rebuilt, catalog republished, zero reload-path errors). FAIL: "catalog version topic correct" —
-  the reload published `95e24c…` not the golden, because `/reload` never re-attaches capability
-  maps (NOT a CORE-1 regression: the verbatim extraction faithfully preserved the old inline
-  path's omission — the OLD image produced the identical hash 2026-08-02). Post-reload the fleet
-  ran capability-less until a heal restart (verified restored: golden + 157 capabilities). Close
-  decision = owner's: the extraction itself verified clean; the failing item re-verifies with
-  CORE-15's fix (LANDED 2026-08-04 — re-run the reload verify at the next deploy: catalog must
-  stay golden across `/reload`). Item A: `POST /reload`'s `reload_system_task` constructs + drives a concrete `MQTTClient` inline; extract an application-layer reload service (e.g. `app/reload_service.py`) so the router stays a thin adapter. **Gated on hardware** — touches the live MQTT-reconnect path; can't be safely HW-verified without you at the rack. **Completion goal = 100% clean hexagon (explicit, added 2026-07-07):** this task owns the **only** `ignore_imports` exception in the import-linter config (`presentation.api.routers.system -> infrastructure.mqtt.client`, backend `pyproject.toml`); done means (1) the reload service extracted and the back-edge gone from the code, (2) the **`ignore_imports` entry deleted** — the contract set (6 since CORE-6) passes with **zero exceptions**, (3) the "one documented exception" passages updated in `docs/architecture/overview.md` + the contract name/comment in `pyproject.toml` + the [[hexagonal-layering]] memory, (4) HW-verified at the rack: `POST /reload` still reconnects cleanly against the live broker. Item B (response DTO for `/config/system`) done in `73ee8d5` — new presentation `SystemConfigResponse` + nested DTOs; wire shape field-identical; `presentation/api/schemas.py` no longer imports the infra `SystemConfig`.
-
 - [ ] **CORE-4** `[P2]` `[deferred]` — **Full `POST /devices/{id}/action` demotion (release-2 candidate).** Decided at the release-1 sign-off (2026-07-06): `/action` ships in release 1 **as the documented internal/dev + UI-fallback door, untouched** — UI-9 removed its last first-party writer, but demoting it before the canonical hardware passes (REL-3, VWB-13) prove coverage would remove the safety net exactly when it might be needed. Post-release scope: strip the UI's un-annotated-control fallback dispatch paths, mark the endpoint internal in the OpenAPI docs (or move it under an internal prefix), and re-examine `/scenario/switch`+`/scenario/shutdown` internalization (the rest of `canonical_first.md` §8 phase 3) in the same pass.
 
 - [ ] **CORE-5** `[P2]` `[deferred]` — **Resurrect the `device-test` CLI (stale ~1 year) + settle the
@@ -935,64 +897,6 @@ endpoint).
   reason" option needs. Runtime win for the owner's full-fleet house is ~nil — this is the
   enabling half of productization deployment profiles (pairs with OPS-35; Domovoy arc / PROD-4
   direction).
-
-- [~] **CORE-14** `[P1]` `HW-GATED` — **Boot race: MQTT connect-timeout skips WB emulation + scenario cards
-  PERMANENTLY — move their setup onto the on-connect callback** (filed 2026-08-02 off the
-  power-outage incident investigation; live evidence in `service.log.20260801.log` on the WB7).
-  **CODE HALF LANDED 2026-08-02 (same session).** Shipped: `make_wb_cards_publisher`
-  (`app/bootstrap.py`, module-level for testability) — WB device cards + scenario cards move
-  into a ONE-SHOT on-connect callback; bootstrap registers it on the client and also calls it
-  directly when the boot connect already happened, gated on the LIVE `mqtt_client.connected`
-  flag (not the wait's snapshot — a connect can land between the 30 s wait timing out and
-  registration). The wait itself stays (normal-boot ordering: cards before uvicorn serves) but
-  a timeout now defers with a WARNING instead of skipping. One-shot by DESIGN: setup publishes
-  config-derived initial control values, so re-running on later reconnects would clobber live
-  values — consequence: a mid-run broker restart still wipes the cards without healing (only
-  the catalog version self-heals, VWB-32); explicit non-goal here, file a follow-up if it ever
-  bites (the heal needs current-state value republish — the never-wired
-  `WBVirtualDeviceService.handle_mqtt_reconnection` republishes metas only). Secondary
-  DECIDED: failed driver init at boot (the Broadlink `Errno 101`) gets NO retry trigger from
-  this task — stays OPS-18 offline-marking + manual `/reload`. 5 new tests
-  (`test_wb_cards_on_connect.py`: latch, containment ×2, fire-time adapter resolution,
-  lost-race end-to-end through the reconnect-loop harness); suite 752, pyright 0, contracts
-  6/6, openapi golden byte-identical; `arch/overview` startup sequence re-truthed same change.
-  **DEPLOY HALF DONE 2026-08-02 (owner-confirmed 2026-08-04):** current main deployed on the
-  WB7 (container restart 09:48 UTC, minutes after the image build); verified live 2026-08-04 —
-  `kitchen_hood/set_light` card retained with full meta, the «Kitchen Light Switch Control»
-  rule fires clean (zero `unexisting control` errors since, surviving wb-rules' own midnight
-  restart), and `bridge/catalog/version` is back to the golden `5622ba7a1a78102a` (the
-  `95e24c…` drift was the OLD image's catalog code — resolved by the deploy, no config issue).
-  The incident that filed this task is CLOSED. **REMAINING (the narrowed HW gate): verify the
-  race fix itself** — cards present after a cold boot that loses the network race (the next
-  power outage proves it for free, or simulate: stop mosquitto across a bridge container
-  restart, start it >30 s later, confirm cards appear on connect — disruptive to the live
-  house, owner's call on timing; NB on the RUNNING image the broker must be back within ~50 s
-  of the bridge's FIRST connect attempt or the old retry budget exhausts — CORE-16 (DONE
-  2026-08-04) removed that cap, so once the next deploy lands the simulation needs no timing
-  window at all: any broker-return delay works).
-  The 2026-08-01 cold boot brought the container up before the host network: bootstrap's 30 s
-  wait for MQTT timed out at 08:01:39 UTC (`WB emulation will be skipped` + `scenario WB cards
-  skipped`), then connect attempt 5/5 SUCCEEDED at 08:02:00 — 20 s too late. Everything
-  connect-driven recovered (subscriptions, the VWB-32 on-connect catalog republish), but the WB
-  virtual cards + scenario cards publish exactly ONCE at bootstrap behind that gate — and since
-  the in-box mosquitto runs without persistence (deliberate, see wb7 deployment notes), the boot
-  wiped every retained bridge card with nothing to repopulate them. Symptom: wb-rules logged
-  `failed to SetValue for unexisting control kitchen_hood/set_light` on every switch press (the
-  «Kitchen Light Switch Control» rule) — the house-visible break. Any cold power-on can
-  reproduce this: the bridge's MQTT client targets the LAN IP (`192.168.110.250`), which doesn't
-  exist until the interface is up, so all early attempts fail unreachable. Scope: fire
-  WB-emulation + scenario-card setup from the MQTT on-connect callback (one-shot latch — the
-  VWB-32 pattern; CORE-1's `rebuild_scenario_cards` hook is already connect-ordered on the
-  reload path) instead of the one-shot 30 s bootstrap gate; a bigger timeout only shrinks the
-  window. Same-boot secondary: the kitchen_hood Broadlink driver init failed (`[Errno 101]
-  Network is unreachable`) and the device sat `connection_status: error` until reload — decide
-  whether failed-setup devices get a retry trigger here, or whether that stays OPS-18
-  offline-marking + manual `/reload`. NB `/reload` is NOT a recovery hatch on the deployed
-  07-15 image: the 2026-08-02 live reload restored no cards — the old inline router calls
-  `set_runtime_services(mqtt_client=...)` which resets `wb_service` to `None`, so per-device
-  emulation setup silently skips publishing (exactly CORE-1's gap (4), fixed on main by the
-  `ReloadService` extraction). Deploying current main is the companion op — and doubles as
-  CORE-1's pending rack verify of `POST /reload`.
 
 ### LIB — pymotivaxmc2 library (sibling repo)
 

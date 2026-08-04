@@ -548,6 +548,54 @@ possible round-3.
 
 ## CORE — Backend core / architecture
 
+- [x] **CORE-1** `[P2]` `[deferred]` `HW-GATED` — **System-router adapter cleanup — Item A only (Item B DONE 2026-05-26).**
+  **CODE HALF LANDED 2026-07-19 (owner directive: implement now, close only after the device test).**
+  Shipped: `app/reload_service.py` (`ReloadService.reload()` = the former router background task,
+  verbatim sequence); the system router only schedules it (`set_reload_service` wiring seam); the
+  **`ignore_imports` exception is DELETED** — 6/6 contracts pass with an EMPTY exception list;
+  `overview.md`/`interfaces.md`/`pyproject` comment/CLAUDE.md dialect re-truthed. The extraction also
+  closed four latent reload gaps found at reconciliation: (1) the replacement client is built by a
+  bootstrap factory IDENTICAL to boot (maintenance guard + traffic observer — the inline version
+  silently lost both); (2) the rewire hook re-points ALL router globals (devices/mqtt/scenarios kept
+  publishing via the STOPPED old client); (3) the VWB-32 on-connect catalog publish is re-registered
+  on the new client; (4) a fresh `WBVirtualDeviceService` rides the swap (the old one was bound to the
+  dead client). Dead write dropped: `device_manager.config_manager = …` assigned an attribute
+  `DeviceManager` never declares or reads. 5 new tests (`test_reload_service.py`); suite 747, pyright
+  0, openapi/golden byte-identical. **Residual RETIRED same day (owner directive, pre-bench):** gap
+  (5) — `ScenarioWBAdapter` held the boot client + boot WB service — closed by a
+  `rebuild_scenario_cards` hook the service fires once the new client is CONNECTED (startup's
+  ordering): bootstrap builds a fresh adapter over the new composition and runs `setup()`, which
+  republishes the cards, re-subscribes their command topics, and re-points
+  `scenario_manager.on_active_changed` at the new adapter (the assignment displaces the old hook; the
+  old adapter is unreferenced and collects). Connection-timeout path skips it, same as boot.
+  **REMAINING (the HW gate): rack verify `POST /reload`** — reconnects cleanly against the live
+  broker, devices command OK after, WB cards + **scenario «Сценарии» cards** + catalog version topic
+  correct. Close only on owner confirmation. **UNBLOCKED 2026-08-02: the CORE-14 deploy put the
+  ReloadService code live on the WB7** (the old image's inline reload was caught live 2026-08-02
+  restoring no cards — exactly gap (4); that failure mode is what this verify now checks against).
+  NB the 2026-08-02 live `/reload` attempt ran on the OLD image and does NOT count — run it fresh
+  on the deployed image. **VERIFY RAN 2026-08-04 — mechanics PASS, one gate item FAILS on a
+  pre-existing bug now tracked as CORE-15.** PASS: ReloadService drove the full sequence against
+  the live broker (reconnect clean, all 14 WB cards + the `scenario_manager_living_room` card
+  rebuilt, catalog republished, zero reload-path errors). FAIL: "catalog version topic correct" —
+  the reload published `95e24c…` not the golden, because `/reload` never re-attaches capability
+  maps (NOT a CORE-1 regression: the verbatim extraction faithfully preserved the old inline
+  path's omission — the OLD image produced the identical hash 2026-08-02). Post-reload the fleet
+  ran capability-less until a heal restart (verified restored: golden + 157 capabilities). Close
+  decision = owner's: the extraction itself verified clean; the failing item re-verifies with
+  CORE-15's fix (LANDED 2026-08-04 — re-run the reload verify at the next deploy: catalog must
+  stay golden across `/reload`). Item A: `POST /reload`'s `reload_system_task` constructs + drives a concrete `MQTTClient` inline; extract an application-layer reload service (e.g. `app/reload_service.py`) so the router stays a thin adapter. **Gated on hardware** — touches the live MQTT-reconnect path; can't be safely HW-verified without you at the rack. **Completion goal = 100% clean hexagon (explicit, added 2026-07-07):** this task owns the **only** `ignore_imports` exception in the import-linter config (`presentation.api.routers.system -> infrastructure.mqtt.client`, backend `pyproject.toml`); done means (1) the reload service extracted and the back-edge gone from the code, (2) the **`ignore_imports` entry deleted** — the contract set (6 since CORE-6) passes with **zero exceptions**, (3) the "one documented exception" passages updated in `docs/architecture/overview.md` + the contract name/comment in `pyproject.toml` + the [[hexagonal-layering]] memory, (4) HW-verified at the rack: `POST /reload` still reconnects cleanly against the live broker. Item B (response DTO for `/config/system`) done in `73ee8d5` — new presentation `SystemConfigResponse` + nested DTOs; wire shape field-identical; `presentation/api/schemas.py` no longer imports the infra `SystemConfig`.
+  **CLOSED 2026-08-04 — the rack verify re-ran on the CORE-15-fixed image and EVERY gate
+  item passed:** ReloadService sequence clean against the live broker; all 14 WB cards + the
+  «Сценарии» card (`scenario_manager_living_room`) rebuilt; capability maps survive (157
+  capabilities, canonical dispatch functional); **catalog version stays golden
+  `5622ba7a1a78102a`** (live API + retained topic — the item that failed the morning verify,
+  cleared by CORE-15); rooms (11) + scenarios (9) + topology (16 links / 6 ordering edges)
+  reload in the same pass.
+  docs: none — completion is verify-only; overview/interfaces/pyproject/CLAUDE.md were
+  re-truthed at the code-half landing.
+  contracts: none — no surface moved; golden byte-identical throughout.
+
 - [x] **CORE-2** `[P1]` — **DONE 2026-07-04** (filed + executed same day; the acceptance-gate item-4 dead-code sweep, scoped against live code). **Removed:** the legacy imperative scenario path — `Scenario.initialize/execute_startup_sequence/execute_shutdown_sequence`, the shared-device `switch_scenario` legacy branch, the string-condition evaluator (`_evaluate_condition`/`_safe_evaluate_condition`/`_parse_condition_value`), `_validate_parameters` + the sequence/condition validators, `_is_power_command` (~330 lines out of `scenario.py`); the **`WB_SCENARIO_RECONCILER` kill-switch** (`switch_scenario`/`deactivate` are reconciler-only now; the already-active early return aligned to the reconciler result shape `{success, powered_off, failures}` — no consumer read the old keys); the **`CommandStep` model + `ScenarioDefinition.startup_sequence`/`shutdown_sequence` fields** (contract regenerated: `openapi.json` −76 lines, `CommandStep` schema gone; UI types regenerated, dead `CommandStep` alias dropped from `ui/src/types/api.ts`; `npm run check` + build green); the **vestigial `DeviceState.output`** field (scenarios model — **correction to the filing text**, which wrongly declared it already-gone after grepping only the devices models; no device state ever had an `output` field, so it was permanently `None`); the **Phase-B `log_migration_guidance()` shim**. **Added guard:** `validate_configuration` now requires a thin `source` selection (a sourceless scenario could never activate; rejected at load with the Bug-2 non-fatal skip). `_convert_device_state` uses `Scenario._safe_get_device_field` as a `@staticmethod` (temp-instance fallback dance removed). **Narrowed (not removed):** the wb_device **capability-less classification path** — the filing text called it the "`group` transitional fallback", but reconciliation showed the config `group` *field* is already extinct (no model defines it, no config carries it, nothing reads it); what remains is the `capabilities=None` branch, which is **live** for `kitchen_hood` (no capability map — the gate-item-1 coverage gap; mapping it is capability/catalog work for the DRV-1 kitchen_hood row or VWB-13, not dead-code removal) **and** for `_build_state_field_to_control_map`, which enumerates controls without capability context for every device. Stale "legacy config group" docstrings corrected in place; `_DOMAIN_GROUP_ALIAS` + the group-vocabulary heuristics stay (live, domain-keyed). **Tests:** legacy-path tests removed / rewritten to thin fixtures (`test_scenario.py`, `test_scenario_models.py`, `test_scenario_manager.py` — manager tests now assert manager-level behavior, transition content stays with `test_scenario_switch_reconciler.py`); new coverage: sourceless-scenario rejection. Suite 487 passing (was 502 — the delta is deleted legacy tests); import contracts 3/3; docs updated (`key-concepts.md` + `devices-and-scenarios.md` legacy-path passages removed). **Left for their owners:** `MQTTClient.stop()/start()` shims → CORE-1; piwheels `pip.conf` → OPS-11; gate item 4's "thorough code review" half + final contract audit remain part of the acceptance-gate pass itself.
 
 - [x] **CORE-3** `[P1]` — **DONE 2026-07-05** (filed + executed same day, off a live-controller diagnosis session — user request "fix the guard here"). **Maintenance-guard fix: survive the real midnight wb-rules restart burst.** Diagnosis (SSH to the WB7 + journal + broker evidence): the midnight event is the user's own root crontab (`0 0 * * * systemctl restart wb-rules`); the restart burst spans ~00:00:05 (driver ready, `meta/driver` republished) through 00:00:10+ (rule files loading, virtual devices + values republished, rule-startup side-effect writes) — the old **fixed 5s window closed mid-burst**; additionally the retained trigger copy **opened a bogus window at every bridge connect** (log-proven 2026-06-06: trigger 1ms after subscribe ate reel_to_reel startup topics), and the client's retained-skip can't substitute because live republishes arrive retain=0 ([MQTT-3.3.1-9]). **Fix (`infrastructure/maintenance/wirenboard_guard.py` + `mqtt/client.py`):** `maintenance_started(topic, retain)` — the client now passes `message.retain`; only a **live (retain=0)** publish of the trigger topic opens a window (the subscribe-time retained replay never does); the window is **sliding** (`duration` = quiet-time in seconds; every in-window message extends it) with a `MAX_WINDOW_S = 60.0` hard cap so a periodic publisher on a subscribed topic can't hold it open forever. Docstrings de-lied (the old ones claimed `meta/online` + `warmup_s`); `MaintenanceConfig.duration` description corrected ("minutes" → seconds/quiet-time semantics — infra-model only, DTO untouched, **no OpenAPI/contract churn**). `config/system.json` keeps `duration: 5` — now meaning "close after 5 quiet seconds," which covers the measured burst with the cap as backstop. **Tests:** new `tests/unit/test_maintenance_guard.py` (9 cases, fake `time.monotonic`: retained-trigger-ignored, live-trigger-opens, quiet-close, activity-extension, hard-cap, mid-window re-arm, retained-mid-window, no-window passthrough, subscription topics). Suite 531; pyright 0; contracts 3/3. **Controller-side (user-owned, out of repo scope):** delete the broken `enable_online_meta_for_wbrules` rule in `/etc/wb-rules/01_initial.js` (`@reboot` unsupported → error spam every load); telegram2wb curl-35 failures + IR_Trainer datatype error noted in passing.
@@ -594,6 +642,77 @@ possible round-3.
 - [x] **CORE-10** `[P1]` — **DONE 2026-07-13** (board delegation **PROD-21**, council **HK-8**; normative `../locveil-commons/process/python-layout.md` §2 satisfied design-then-implement). **Import package renamed `wb_mqtt_bridge` → `locveil_bridge`; console scripts + the deliberate `catalog-v1.7` cut.** ONE tree churn (bridge was already src-layout — no layout move owed, as PROD-21 reconciliation predicted). **Rename:** `git mv backend/src/wb_mqtt_bridge → locveil_bridge` (98 files, history preserved) + identifier sweep across **104 `.py`** (51 src + 53 tests), `pyproject.toml` (`[project.name]` was already `locveil-bridge`; the entry-point **group** `wb_mqtt_bridge.devices` → `locveil_bridge.devices` + all module paths + the 6 import-linter contract module refs + `root_packages`), `pyrightconfig.json`, `config/device-state-mapping.json` (9 `stateClassImport` paths), the CI `python-health` `src:` path, `docs/manifest.json` (7 path globs), and the live docs. **Console scripts:** `wb-openapi` → `locveil-openapi`, `wb-catalog` → `locveil-catalog`; **`wb-api` retired** (all callers in-repo, hard cut); `locveil-bridge`/`mqtt-sniffer`/`device-test`/`broadlink-*` kept their names (module paths only). **Wire identity PRESERVED (OPS-26 territory, NOT this task):** the two `driver_name="wb_mqtt_bridge"` literals (`wb_device/service.py:77`, `devices/base.py:122` — the `meta/driver` value) were explicitly restored after the sweep and left unchanged; verified no test asserts the string. **catalog-v1.7 (deliberate minor cut):** the rename moved the module-qualified names of the two `ManualInstructions` schema variants in `openapi.json` (`wb_mqtt_bridge__…` → `locveil_bridge__…`) — a schema-name rename, no field/structural change, **golden byte-identical** (`5622ba7a1a78102a`). Bumped `CONTRACT_VERSION` 1.6→1.7; regenerated via the renamed CLIs (`locveil-openapi` → `backend/openapi.json` + `cp` to `contracts/catalog/openapi.json`; `locveil-catalog --stamp` → golden + STAMP now `catalog-v1.7`, date 2026-07-13) + `ui gen:api-types`; contract README Versioning narrative continued. One voice re-pin after this covers catalog v1.6+v1.7 (staleness lane, never a push gate). **Stale build artifacts:** removed the gitignored `backend/src/*.egg-info` dirs (they carried the old entry-point group and polluted `importlib.metadata` on the local `src`-on-path install; reinstalled editable to refresh `dist-info`). **sys.path shims:** the delegation estimated 4 inert; the real count was **9** (all in collected `test_*.py`; their inserts are redundant given the editable install + `conftest.py`'s path insert) — removed all 9 + their orphaned `sys`/`os`/`Path` imports (user-confirmed the clean sweep); `conftest.py` + `auto_wrap_devices.py` (load-bearing for `from tests import …`) and the standalone scripts `debug.py`/`device_test.py` kept. Gates: import-linter **6/6**, pyright **0/0/0**, pytest **725 passed** (`not requires_device`), UI `npm run check` + `build` green, eval `locveil-openapi --stdout` valid. docs: backend-readme, contributing, ui-readme, eval-readme, quickstart, arch/overview, howto/new-driver, contract/catalog.
 
 - [x] **CORE-11** `[P1]` — **DONE 2026-07-13** (board delegation **PROD-21**, council **HK-8**; normative `../locveil-commons/process/python-layout.md` §1 — product data lives at the repo root, config tree is `config/` singular, Dockerfiles in repo-root `docker/` built with root context). **Config tree → repo root; Dockerfiles → `docker/` with root build context.** Two commits, **NO contract cut** (golden byte-identical `5622ba7a1a78102a`). **(a) Config move** (`git mv backend/config → config`, all files pure renames): the `ConfigManager`/CLI default is the CWD-relative `"config"` and **stays relative** — the container resolves it via WORKDIR `/app` + the `/app/config` mount (a repo-relative anchor would break the container), so the only code change is the deployment-root convention, not the default value. **Cert-path coupling found in reconciliation** (this is what the delegation's "loader/CLI defaults" item was pointing at): LG TV device JSONs store cert paths as `config/devices/certs/*.pem`, validated relative to CWD = the deployment root; that root is now the repo root (was `backend/`), matching how the container resolves from `/app`. So the offline catalog build + the real `locveil-catalog`/`locveil-openapi` regen now run **from the repo root** (`uv run --project backend …`); `dump_catalog`'s `--output` default moved `../contracts/…` → `contracts/…`, `test_contracts_golden` builds under `monkeypatch.chdir(REPO)`, and the regen hint + `contracts/catalog/README` + `CONTRIBUTING` + `QUICKSTART` say so — verified the repo-root regen reproduces the byte-identical golden with the LG TVs present. **~15 test config anchors** retargeted to repo-root/`config` (`parents[2]→[3]`, `BACKEND→REPO`, the `"backend"/"config"` segment drop, a bare `open('config/…')` in `test_kitchen_hood_parameters`); walk-up discovery tests auto-adapt. `ops/update.sh` rsync source, compose comments, the CI path filters (**both** backend + ui jobs now list `config/**`), the `config-master-tree` invariant text, the manifest globs, and the two setup-flow diagrams (`.dot` + regenerated `.png`) all followed the move. **(b) Dockerfiles** (`git mv backend/Dockerfile → docker/Dockerfile.backend`, `ui/Dockerfile → docker/Dockerfile.ui`, both built with **root context**): backend COPYs re-prefixed (`src/`→`backend/src/`, `pyproject.toml uv.lock`→`backend/…`); **fixed the CORE-10 miss** `CMD ["wb-api"…]` → `["locveil-bridge"…]` (the retired script would have failed the container at start); the UI Dockerfile's `COPY backend/config` + `COPY backend/openapi.json` were **vestigial** (the build is typecheck + vite only, reading nothing outside `ui/` — its own comment said so) and were removed; CI `context`/`file` repointed for both jobs; the two component `.dockerignore`s merged into one root `.dockerignore` (both images now share the root context) and deleted. Both images **build clean** locally against the root context (native amd64). Gates: import-linter 6/6, pyright 0/0/0, pytest **725 passed**, contract-guard 0, docs-manifest 8/8, UI `check`+`build` green. docs: backend-readme, ui-readme, contributing, quickstart, contract/catalog, arch/ui, howto/new-device, howto/new-scenario, install, diagram/device-setup-flow, diagram/topology-setup-flow. Remaining PROD-21 bridge work: **OPS-26** (owner-gated `meta/driver` wire cutover).
+
+- [x] **CORE-14** `[P1]` `HW-GATED` — **Boot race: MQTT connect-timeout skips WB emulation + scenario cards
+  PERMANENTLY — move their setup onto the on-connect callback** (filed 2026-08-02 off the
+  power-outage incident investigation; live evidence in `service.log.20260801.log` on the WB7).
+  **CODE HALF LANDED 2026-08-02 (same session).** Shipped: `make_wb_cards_publisher`
+  (`app/bootstrap.py`, module-level for testability) — WB device cards + scenario cards move
+  into a ONE-SHOT on-connect callback; bootstrap registers it on the client and also calls it
+  directly when the boot connect already happened, gated on the LIVE `mqtt_client.connected`
+  flag (not the wait's snapshot — a connect can land between the 30 s wait timing out and
+  registration). The wait itself stays (normal-boot ordering: cards before uvicorn serves) but
+  a timeout now defers with a WARNING instead of skipping. One-shot by DESIGN: setup publishes
+  config-derived initial control values, so re-running on later reconnects would clobber live
+  values — consequence: a mid-run broker restart still wipes the cards without healing (only
+  the catalog version self-heals, VWB-32); explicit non-goal here, file a follow-up if it ever
+  bites (the heal needs current-state value republish — the never-wired
+  `WBVirtualDeviceService.handle_mqtt_reconnection` republishes metas only). Secondary
+  DECIDED: failed driver init at boot (the Broadlink `Errno 101`) gets NO retry trigger from
+  this task — stays OPS-18 offline-marking + manual `/reload`. 5 new tests
+  (`test_wb_cards_on_connect.py`: latch, containment ×2, fire-time adapter resolution,
+  lost-race end-to-end through the reconnect-loop harness); suite 752, pyright 0, contracts
+  6/6, openapi golden byte-identical; `arch/overview` startup sequence re-truthed same change.
+  **DEPLOY HALF DONE 2026-08-02 (owner-confirmed 2026-08-04):** current main deployed on the
+  WB7 (container restart 09:48 UTC, minutes after the image build); verified live 2026-08-04 —
+  `kitchen_hood/set_light` card retained with full meta, the «Kitchen Light Switch Control»
+  rule fires clean (zero `unexisting control` errors since, surviving wb-rules' own midnight
+  restart), and `bridge/catalog/version` is back to the golden `5622ba7a1a78102a` (the
+  `95e24c…` drift was the OLD image's catalog code — resolved by the deploy, no config issue).
+  The incident that filed this task is CLOSED. **REMAINING (the narrowed HW gate): verify the
+  race fix itself** — cards present after a cold boot that loses the network race (the next
+  power outage proves it for free, or simulate: stop mosquitto across a bridge container
+  restart, start it >30 s later, confirm cards appear on connect — disruptive to the live
+  house, owner's call on timing; NB on the RUNNING image the broker must be back within ~50 s
+  of the bridge's FIRST connect attempt or the old retry budget exhausts — CORE-16 (DONE
+  2026-08-04) removed that cap, so once the next deploy lands the simulation needs no timing
+  window at all: any broker-return delay works).
+  The 2026-08-01 cold boot brought the container up before the host network: bootstrap's 30 s
+  wait for MQTT timed out at 08:01:39 UTC (`WB emulation will be skipped` + `scenario WB cards
+  skipped`), then connect attempt 5/5 SUCCEEDED at 08:02:00 — 20 s too late. Everything
+  connect-driven recovered (subscriptions, the VWB-32 on-connect catalog republish), but the WB
+  virtual cards + scenario cards publish exactly ONCE at bootstrap behind that gate — and since
+  the in-box mosquitto runs without persistence (deliberate, see wb7 deployment notes), the boot
+  wiped every retained bridge card with nothing to repopulate them. Symptom: wb-rules logged
+  `failed to SetValue for unexisting control kitchen_hood/set_light` on every switch press (the
+  «Kitchen Light Switch Control» rule) — the house-visible break. Any cold power-on can
+  reproduce this: the bridge's MQTT client targets the LAN IP (`192.168.110.250`), which doesn't
+  exist until the interface is up, so all early attempts fail unreachable. Scope: fire
+  WB-emulation + scenario-card setup from the MQTT on-connect callback (one-shot latch — the
+  VWB-32 pattern; CORE-1's `rebuild_scenario_cards` hook is already connect-ordered on the
+  reload path) instead of the one-shot 30 s bootstrap gate; a bigger timeout only shrinks the
+  window. Same-boot secondary: the kitchen_hood Broadlink driver init failed (`[Errno 101]
+  Network is unreachable`) and the device sat `connection_status: error` until reload — decide
+  whether failed-setup devices get a retry trigger here, or whether that stays OPS-18
+  offline-marking + manual `/reload`. NB `/reload` is NOT a recovery hatch on the deployed
+  07-15 image: the 2026-08-02 live reload restored no cards — the old inline router calls
+  `set_runtime_services(mqtt_client=...)` which resets `wb_service` to `None`, so per-device
+  emulation setup silently skips publishing (exactly CORE-1's gap (4), fixed on main by the
+  `ReloadService` extraction). Deploying current main is the companion op — and doubles as
+  CORE-1's pending rack verify of `POST /reload`.
+  **CLOSED 2026-08-04 — the lost-race simulation PASSED on the deployed image (CORE-16
+  live-proven in the same run):** mosquitto stopped, bridge restarted; attempt 1 refused
+  08:16:31 UTC, the 30 s gate timed out 08:17:01 with the new deferral WARNING (`WB virtual
+  cards will be published on first connect`) — the exact 08-01 scenario; the loop survived
+  past the old 5-attempt budget (attempts 6 and 7 observed — pre-CORE-16 code would have
+  given up permanently after 08:17:22); broker returned 08:18:01, attempt 7 connected
+  08:18:17, and the one-shot on-connect callback published everything seconds later
+  (emulation 08:18:21, scenario card 08:18:24). Post-state: 14 cards retained,
+  `kitchen_hood/set_light` present, catalog golden. House-dark window ≈5.5 min,
+  owner-sanctioned.
+  docs: none — arch/overview's startup-sequence passage was updated at the code-half landing
+  (same change as the behavior); nothing further at close.
+  contracts: none — no surface moved.
 
 - [x] **CORE-15** `[P1]` — **DONE 2026-08-04** (filed + executed same day off the CORE-1 rack
   verify; owner directive "fix both problems", scope extended at execution to the ENTIRE config

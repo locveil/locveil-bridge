@@ -28,6 +28,21 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-08-04 (night) — CORE-1 and CORE-14 BOTH CLOSED: the deploy + two live verifies.**
+  Owner deployed the CORE-15/16 image, then ordered the verifies. **`/reload` re-verify
+  (closes CORE-1):** every gate item passed — clean ReloadService sequence, 14 cards + the
+  «Сценарии» card rebuilt, capability maps survive (157), rooms/scenarios/topology reloaded,
+  and the catalog **stayed golden** live + retained (the morning's failing item, cleared by
+  CORE-15). CORE-1's arc ends: filed as an adapter cleanup, it deleted the hexagon's last
+  import-linter exception and its verify caught a fleet-wide capability-loss bug on the way
+  out. **Lost-race simulation (closes CORE-14, live-proves CORE-16):** broker stopped across
+  a bridge restart — attempt 1 refused 08:16:31 UTC, the 30 s gate timed out 08:17:01 with
+  the new deferral warning (the exact 08-01 scenario), the loop survived past the old
+  5-attempt budget (attempts 6–7 observed), broker back 08:18:01, attempt 7 connected
+  08:18:17, and the one-shot on-connect callback published all cards seconds later. The
+  2026-08-01 power-outage class is now closed end-to-end: cards publish on whichever connect
+  eventually lands, and the connect always eventually lands.
+
 - **2026-08-04 (evening) — CORE-15 + CORE-16 BOTH DONE same day as filed (owner: "fix both
   problems").** **CORE-15:** the reload-vs-boot audit found FOUR parity gaps, not one — the
   re-initialized fleet lost capability maps, the SSE `event_publisher`, the problem-report
