@@ -744,26 +744,39 @@ endpoint).
   (`cd ui && npm run check && npm run build`).
 
 - [ ] **UI-21** `[P1]` `[deferred]` — **Main-UI review/redesign: the wireframe/layout session +
-  stylebook/ui-kit adoption for `ui/` — design** (`design-then-implement`; filed 2026-07-20 at the
+  the operations `ui/`'s OWN stylebook — design** (`design-then-implement`; filed 2026-07-20 at the
   owner's announcement — this is the filing the board's PROD-10 stage-② record deferred: "island
   as-shipped + D10 fluid implementation deferred to a dedicated bridge wireframe/layout session
-  (owner-announced; bridge files it at that session's intake)"). The workbench side already lives
-  on ui-kit (UI-18, day one); the **operations `ui/` does not** — PROD-10's extraction found it a
-  stock shadcn install with never-chosen default theme values (the token carrier exists, empty)
-  and the remote island a deliberately dark, theme-independent surface whose stiffness is
-  documented as the **D10 fluid-rebuild requirement**. **Scope of the session (deliverable = a
-  design doc under `docs/design/ui/`):** (1) wireframe/layout pass over the operations surfaces
-  (remote pages, runtime device pages, appliance/room pages, HomePage/nav) — owner sketches are
-  first-class input (the `remote.png` precedent); (2) the `ui/` adoption plan for the ratified
-  tokens + `locveil-ui-kit` (Tailwind preset, dual theme, steel-A neutrals + steel-blue accent;
-  icon SPLIT ruling: Material filled stays inside the island — manifest names are a backend
-  contract); (3) the **D10 fluid island rebuild** design; (4) walk the divergence list
-  (`../locveil-commons/docs/design/ui/divergence-list.md` D1–D10) and record per-item verdicts;
-  (5) load the commons **`ui-style` skill** for the session (the stylebook is the taste
-  authority — no re-elicitation). Implementation follow-ups filed at design completion, per the
-  dialect. Inputs: `../locveil-commons/docs/design/ui/` (stylebook, token-inventory-draft,
-  divergence-list), `ui-kit-v1` (0.1.x), `remote.png`. `config-ui-stays-functional` gates apply
-  to every implementation follow-up.
+  (owner-announced; bridge files it at that session's intake)"). **AMENDED 2026-08-04 (owner
+  correction):** the original filing framed item (2) as "adoption plan for the ratified tokens +
+  ui-kit" — WRONG framing. The split of identities: the **workbench plugin** is the ui-kit
+  consumer (UI-18, day one, stays as-is); the **operations `ui/` defines its OWN stylebook** —
+  its own visual identity, produced *in the spirit of commons* (the PROD-10 three-stage method:
+  extraction → rendered-A/B style council → codification) but as a **fully separate story**, NOT
+  an adoption of the workbench's ratified token values. This matches the closed PROD-10 ④
+  record's forward note ("future controller-UI council adds token sections/profiles") — the one
+  design question the session must settle against that record's "never a second kit" ruling is
+  the DELIVERY VEHICLE: operations tokens as a new token section/profile on the shared
+  `locveil-ui-kit` vs fully repo-local styling; record the verdict (a profile-on-shared-kit
+  outcome is a commons write-back). Context unchanged: PROD-10's extraction found `ui/` a stock
+  shadcn install with never-chosen default theme values (the token carrier exists, empty) and
+  the remote island a deliberately dark, theme-independent surface whose stiffness is documented
+  as the **D10 fluid-rebuild requirement**. **Scope of the session (deliverable = a design doc
+  under `docs/design/ui/`):** (1) wireframe/layout pass over the operations surfaces (remote
+  pages, runtime device pages, appliance/room pages, HomePage/nav) — owner sketches are
+  first-class input (the `remote.png` precedent); (2) the operations style council — elicit +
+  codify `ui/`'s own stylebook/tokens (dark-first? island-led? the owner decides by rendered
+  A/B, never by terms), plus the vehicle verdict above (icon SPLIT ruling stands regardless:
+  Material filled stays inside the island — manifest names are a backend contract); (3) the
+  **D10 fluid island rebuild** design; (4) walk the divergence list
+  (`../locveil-commons/docs/design/ui/divergence-list.md` D1–D10) and record per-item verdicts —
+  judged against the NEW operations stylebook, where a "divergence" from the workbench look may
+  be ratified as operations identity rather than fixed; (5) the commons **`ui-style` skill** +
+  stylebook serve as the METHOD reference for the session, not the taste authority over `ui/`.
+  Implementation follow-ups filed at design completion, per the dialect. Inputs:
+  `../locveil-commons/docs/design/ui/` (method + divergence-list), `ui-kit-v1` (0.1.x, the
+  workbench identity for contrast), `remote.png`. `config-ui-stays-functional` gates apply to
+  every implementation follow-up.
 
 ### OPS — Docker / CI-CD / deploy / ops
 
