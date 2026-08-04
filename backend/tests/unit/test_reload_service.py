@@ -42,6 +42,7 @@ def _make_service(devices=None, handler=None):
     m.wb_service = MagicMock()
     m.client_factory = MagicMock(return_value=m.new_client)
     m.on_new_client = MagicMock(return_value=m.wb_service)
+    m.rewire_fleet = AsyncMock()
     m.rebuild_scenario_cards = AsyncMock()
     m.publish_catalog_version = AsyncMock()
 
@@ -50,6 +51,7 @@ def _make_service(devices=None, handler=None):
         device_manager=m.device_manager,
         client_factory=m.client_factory,
         on_new_client=m.on_new_client,
+        rewire_fleet=m.rewire_fleet,
         rebuild_scenario_cards=m.rebuild_scenario_cards,
         publish_catalog_version=m.publish_catalog_version,
     )
@@ -85,7 +87,9 @@ async def test_reload_swaps_the_client_and_rewires_before_reinit():
     m.device_manager.shutdown_devices.assert_awaited_once()
     m.device_manager.initialize_devices.assert_awaited_once_with({"cfg": "s"})
     assert service.mqtt_client is m.new_client
-    assert dev.mqtt_client is m.new_client  # safety-net assignment
+    # CORE-15: the composition root's fleet re-wiring recipe ran over the new
+    # composition (collaborators + capability maps + rooms/scenarios/topology).
+    m.rewire_fleet.assert_awaited_once_with(m.new_client, m.wb_service)
     # Subscriptions re-established on the NEW client with the device's topics.
     m.new_client.connect_and_subscribe.assert_awaited_once_with(
         {"t/1": handler, "t/2": handler}
@@ -120,6 +124,29 @@ async def test_connection_timeout_skips_wb_emulation_and_scenario_cards():
     dev.setup_wb_emulation_if_enabled.assert_not_awaited()
     m.rebuild_scenario_cards.assert_not_awaited()
     m.publish_catalog_version.assert_awaited_once()
+    # The config-bundle rewire is NOT connection-gated — capability maps,
+    # rooms, scenarios, and topology reload even when the broker is down.
+    m.rewire_fleet.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_rewire_fleet_runs_after_reinit_and_before_subscribe():
+    """CORE-15 ordering: the recipe needs the NEW device objects (after
+    initialize_devices) and must precede subscription setup."""
+    order = []
+    dev = _fake_device(["t/1"])
+    service, m = _make_service(devices={"d1": dev}, handler=MagicMock())
+    m.device_manager.initialize_devices = AsyncMock(
+        side_effect=lambda *_a, **_k: order.append("init")
+    )
+    m.rewire_fleet.side_effect = lambda *_a: order.append("rewire")
+    m.new_client.connect_and_subscribe = AsyncMock(
+        side_effect=lambda *_a, **_k: order.append("subscribe")
+    )
+
+    await service.reload()
+
+    assert order == ["init", "rewire", "subscribe"]
 
 
 @pytest.mark.asyncio

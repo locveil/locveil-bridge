@@ -28,6 +28,23 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-08-04 (evening) — CORE-15 + CORE-16 BOTH DONE same day as filed (owner: "fix both
+  problems").** **CORE-15:** the reload-vs-boot audit found FOUR parity gaps, not one — the
+  re-initialized fleet lost capability maps, the SSE `event_publisher`, the problem-report
+  `dispatch_ring`, AND the post-fleet config consumers (`RoomManager.reload()` +
+  `ScenarioManager.initialize()` were never called — rooms/scenario/**topology** edits silently
+  no-oped on `/reload`; the owner's suspicion confirmed). Fix = ONE recipe, no drift: the
+  post-`initialize_devices` wiring extracted to module-level `wire_fleet` in `app/bootstrap.py`,
+  shared by boot and reload; reload gains a `rewire_fleet` composition hook (wire_fleet + rooms
+  + scenarios/topology), deliberately not connection-gated. Scenario re-init is live-safe
+  (SCN-18 restore = tracking-only). **CORE-16:** the connect loop's `while retry_count <
+  max_retries` became `while True` with backoff capped at 60 s — the never-connected boot
+  episode no longer gives up after ~50 s with the healthcheck green; CORE-9's
+  reset-on-success stays; shutdown still exits via CancelledError. With both landed, CORE-14's
+  simulation timing window disappears (any broker-return delay works — post-deploy). Suite
+  **757**, pyright 0, contracts 6/6, openapi/golden byte-identical. Live re-verify (catalog
+  stays golden across `/reload`) rides the next deploy = CORE-1's re-run.
+
 - **2026-08-04 (later) — CORE-1's `/reload` rack verify RAN: mechanics pass, and the verify
   earned its keep — two P1 findings filed (CORE-15/CORE-16).** `POST /reload` on the deployed
   image drove the full ReloadService sequence clean (reconnect, all 14 WB cards + the

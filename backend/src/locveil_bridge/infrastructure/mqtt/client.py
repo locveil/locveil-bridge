@@ -185,15 +185,21 @@ class MQTTClient(MessageBusPort):
     
     async def _run_mqtt_client(self, client_args, topics_to_subscribe):
         """Run the MQTT client in an async context manager with the given topics."""
-        max_retries = 5
-        retry_delay = 5  # seconds
+        # CORE-16: the loop NEVER gives up. A finite attempt budget on the
+        # never-yet-connected boot episode meant a broker that takes >~50 s to
+        # appear (power-outage cold boot) left MQTT dead for the process
+        # lifetime while the HTTP healthcheck stayed green. Backoff ramps
+        # retry_delay * attempt, capped at MAX_RETRY_WAIT; a successful connect
+        # resets the episode (CORE-9).
+        retry_delay = 5  # seconds (base; wait = min(retry_delay * attempt, cap))
+        MAX_RETRY_WAIT = 60  # seconds — broker is on the same box; steady-state cadence
         retry_count = 0
-        
+
         logger.info(f"Running MQTT client with args: {client_args}")
-        
-        while retry_count < max_retries:
+
+        while True:
             try:
-                logger.info(f"Connecting to MQTT broker at {client_args.get('hostname', 'unknown')}:{client_args.get('port', 'unknown')} (attempt {retry_count + 1}/{max_retries})")
+                logger.info(f"Connecting to MQTT broker at {client_args.get('hostname', 'unknown')}:{client_args.get('port', 'unknown')} (attempt {retry_count + 1})")
                 
                 # Add Last Will Testament messages to client args
                 if self._will_messages:
@@ -328,12 +334,9 @@ class MQTTClient(MessageBusPort):
                 self.connected = False
                 self._connection_event.clear()  # Clear connection event on MQTT error
                 retry_count += 1
-                if retry_count < max_retries:
-                    wait_time = retry_delay * retry_count
-                    logger.info(f"Retrying connection in {wait_time} seconds...")
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.error(f"Max retries ({max_retries}) reached. Giving up MQTT connection.")
+                wait_time = min(retry_delay * retry_count, MAX_RETRY_WAIT)
+                logger.info(f"Retrying connection in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
             except CancelledError:
                 logger.info("MQTT client task cancelled")
                 break
@@ -344,12 +347,9 @@ class MQTTClient(MessageBusPort):
                 self.connected = False
                 self._connection_event.clear()  # Clear connection event on unexpected error
                 retry_count += 1
-                if retry_count < max_retries:
-                    wait_time = retry_delay * retry_count
-                    logger.info(f"Retrying connection in {wait_time} seconds...")
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.error(f"Max retries ({max_retries}) reached. Giving up MQTT connection.")
+                wait_time = min(retry_delay * retry_count, MAX_RETRY_WAIT)
+                logger.info(f"Retrying connection in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
             finally:
                 if self.connected:  # Only reset if we were connected
                     self.connected = False

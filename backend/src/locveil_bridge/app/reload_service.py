@@ -13,6 +13,15 @@ shaped on its own side:
   publish (VWB-32), updates its own shutdown reference, and returns a fresh
   WB virtual-device service bound to the new client (the old one kept
   publishing into the stopped client).
+- ``rewire_fleet`` fires after ``initialize_devices`` rebuilds the fleet
+  (CORE-15): bootstrap runs the SAME ``wire_fleet`` recipe boot uses (MQTT
+  client, WB service, SSE event publisher, dispatch ring, capability maps,
+  exposure check) and then reloads the config consumers built after the fleet
+  — room definitions + membership, scenario definitions + Layer-0 topology.
+  Before this hook the re-initialized fleet ran with NO capability maps
+  (canonical dispatch dead fleet-wide, catalog published empty capabilities),
+  no SSE publisher, no dispatch ring, and stale rooms/scenarios/topology —
+  until the next container restart.
 - ``rebuild_scenario_cards`` fires once the new client is CONNECTED (card
   publishes + command-topic subscriptions need a live client, mirroring
   startup's ordering): bootstrap builds a fresh ScenarioWBAdapter over the
@@ -47,6 +56,7 @@ class ReloadService:
         device_manager: DeviceManager,
         client_factory: Callable[[], MQTTClient],
         on_new_client: Callable[[MQTTClient], WBVirtualDeviceService],
+        rewire_fleet: Callable[[MQTTClient, WBVirtualDeviceService], Awaitable[None]],
         rebuild_scenario_cards: Callable[[MQTTClient, WBVirtualDeviceService], Awaitable[None]],
         publish_catalog_version: Callable[[], Awaitable[None]],
     ):
@@ -54,6 +64,7 @@ class ReloadService:
         self._device_manager = device_manager
         self._client_factory = client_factory
         self._on_new_client = on_new_client
+        self._rewire_fleet = rewire_fleet
         self._rebuild_scenario_cards = rebuild_scenario_cards
         self._publish_catalog_version = publish_catalog_version
         # The current live client — seeded by bootstrap at startup, swapped
@@ -87,9 +98,11 @@ class ReloadService:
                 self._config_manager.get_all_device_configs()
             )
 
-            # Safety-net assignment (already set in the constructor; idempotent).
-            for device in self._device_manager.devices.values():
-                cast(BaseDevice, device).mqtt_client = new_client
+            # CORE-15: full fleet + config-bundle re-wiring via the composition
+            # root's shared recipe (collaborators, capability maps, exposure
+            # check, rooms + scenarios + topology). Replaces the old
+            # mqtt_client-only safety net — the recipe assigns that too.
+            await self._rewire_fleet(new_client, wb_service)
 
             # Create topic to handler mapping
             topic_handlers: Dict[str, Callable] = {}

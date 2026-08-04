@@ -25,6 +25,7 @@ from locveil_bridge.domain.devices.models import (
     MitsubishiHvacState,
 )
 from locveil_bridge.app.reload_service import ReloadService
+from locveil_bridge.domain.ports import EventPublisherPort
 from locveil_bridge.infrastructure.config.manager import ConfigManager
 from locveil_bridge.domain.devices.service import DeviceManager
 from locveil_bridge.infrastructure.mqtt.client import MQTTClient
@@ -212,6 +213,54 @@ async def _release_partial_startup(
             log.warning(f"Startup-failure cleanup: state store close failed: {e}")
 
 
+def wire_fleet(
+    device_manager: DeviceManager,
+    mqtt_client: MQTTClient,
+    wb_service: WBVirtualDeviceService,
+    event_publisher: EventPublisherPort,
+    dispatch_ring: DispatchRing,
+    capabilities_dir: Path,
+) -> None:
+    """The post-``initialize_devices`` fleet wiring recipe — ONE copy for boot
+    AND reload (CORE-15).
+
+    Assigns every device its runtime collaborators (MQTT client, WB service,
+    SSE event publisher, problem-report dispatch ring), attaches the Layer-1
+    capability maps, and runs the command-exposure check. The reload path used
+    to re-assign only ``mqtt_client``: the re-initialized fleet ran with no
+    capability maps (canonical dispatch answered ``capability_not_supported``
+    fleet-wide, the catalog published empty capabilities), no SSE publisher,
+    and no dispatch ring — until the next container restart. Boot and reload
+    now share this single recipe so the two compositions cannot drift.
+    """
+    logger = logging.getLogger(__name__)
+    from locveil_bridge.infrastructure.devices.base import BaseDevice as _BaseDevice  # local: keep domain/ import-pure
+    for device_id, port_device in device_manager.devices.items():
+        device = cast(_BaseDevice, port_device)
+        device.mqtt_client = mqtt_client
+        device.wb_service = wb_service
+        device.event_publisher = event_publisher  # SSE fan-out via EventPublisherPort
+        device.dispatch_ring = dispatch_ring  # problem-report evidence (B-2)
+        logger.info(f"Device {device_id} initialized with typed configuration and WB service")
+
+    # Attach Layer 1 capability maps from config/capabilities/ (hot-fixable JSON).
+    attach_capability_maps(device_manager.devices, capabilities_dir)
+    logger.info("Attached capability maps to devices")
+
+    exposure_violations = validate_command_exposure(device_manager.devices)
+    if exposure_violations:
+        logger.warning(
+            "Command-exposure check: %d command(s) are `exposed` but not capability-backed "
+            "(they will be invisible in Layer-3 manifests — mark `exposed: false` or add a "
+            "capability): %s",
+            len(exposure_violations), ", ".join(sorted(exposure_violations)),
+        )
+    else:
+        logger.info(
+            "Command-exposure check: OK (every device command is exposed:false or capability-backed)"
+        )
+
+
 def make_wb_cards_publisher(
     device_manager: DeviceManager,
     get_scenario_adapter: Callable[[], ScenarioWBAdapter],
@@ -373,37 +422,17 @@ def create_app() -> FastAPI:
             # Initialize devices using typed configurations only
             await device_manager.initialize_devices(config_manager.get_all_device_configs())
 
-            # Wire the SSE event-publisher port + safety-net `mqtt_client` / `wb_service`
-            # assignments (already set in the constructor; idempotent here).
-            # device_manager.devices values are DevicePort by contract -- at runtime
-            # every shipped impl is BaseDevice (which has these attributes). app/
-            # is the composition root, allowed to know infrastructure types; cast
-            # to BaseDevice so pyright sees the BaseDevice attribute surface.
-            from locveil_bridge.infrastructure.devices.base import BaseDevice as _BaseDevice  # local: keep domain/ import-pure
-            for device_id, port_device in device_manager.devices.items():
-                device = cast(_BaseDevice, port_device)
-                device.mqtt_client = mqtt_client
-                device.wb_service = wb_service
-                device.event_publisher = sse_manager  # SSE fan-out via EventPublisherPort
-                device.dispatch_ring = dispatch_ring  # problem-report evidence (B-2)
-                logger.info(f"Device {device_id} initialized with typed configuration and WB service")
-
-            # Attach Layer 1 capability maps from config/capabilities/ (hot-fixable JSON).
-            attach_capability_maps(device_manager.devices, Path(config_manager.config_dir) / "capabilities")
-            logger.info("Attached capability maps to devices")
-
-            _exposure_violations = validate_command_exposure(device_manager.devices)
-            if _exposure_violations:
-                logger.warning(
-                    "Command-exposure check: %d command(s) are `exposed` but not capability-backed "
-                    "(they will be invisible in Layer-3 manifests — mark `exposed: false` or add a "
-                    "capability): %s",
-                    len(_exposure_violations), ", ".join(sorted(_exposure_violations)),
-                )
-            else:
-                logger.info(
-                    "Command-exposure check: OK (every device command is exposed:false or capability-backed)"
-                )
+            # Wire the fleet's runtime collaborators + capability maps via the
+            # shared boot/reload recipe (CORE-15 — `wire_fleet`; the reload path
+            # calls the same function so the two compositions cannot drift).
+            # device_manager.devices values are DevicePort by contract -- at
+            # runtime every shipped impl is BaseDevice; app/ is the composition
+            # root, allowed to know infrastructure types.
+            wire_fleet(
+                device_manager, mqtt_client, wb_service,
+                sse_manager, dispatch_ring,
+                Path(config_manager.config_dir) / "capabilities",
+            )
 
             # Persisted device state is restored inside initialize_devices(), per device BEFORE
             # its setup() — it must precede the post-setup initial persist, which would otherwise
@@ -636,11 +665,35 @@ def create_app() -> FastAPI:
                 except Exception as e:
                     logger.error(f"Failed to re-set up scenario WB cards after reload: {str(e)}")
 
+            # Narrowed bindings for the closure below — the nonlocals are
+            # Optional until startup assigns them, which has happened by here.
+            reload_device_manager = device_manager
+            reload_capabilities_dir = Path(config_manager.config_dir) / "capabilities"
+
+            async def _rewire_fleet_after_reload(
+                new_client: MQTTClient, new_wb_service: WBVirtualDeviceService
+            ) -> None:
+                # CORE-15: full config-bundle parity on /reload. The shared
+                # boot recipe first (runtime collaborators + capability maps +
+                # exposure check — without it the re-initialized fleet ran
+                # capability-less until the next restart), then the config
+                # consumers boot constructs AFTER the fleet: room definitions +
+                # membership over the new device objects, scenario definitions +
+                # the Layer-0 topology. Scenario restore is tracking-only
+                # (SCN-18) — safe to re-run against a live house.
+                wire_fleet(
+                    reload_device_manager, new_client, new_wb_service,
+                    sse_manager, dispatch_ring, reload_capabilities_dir,
+                )
+                room_manager.reload()
+                await scenario_manager.initialize()
+
             reload_service = ReloadService(
                 config_manager=config_manager,
                 device_manager=device_manager,
                 client_factory=_build_mqtt_client,
                 on_new_client=_adopt_mqtt_client,
+                rewire_fleet=_rewire_fleet_after_reload,
                 rebuild_scenario_cards=_rebuild_scenario_cards,
                 publish_catalog_version=_publish_catalog_version,
             )
@@ -715,6 +768,7 @@ def create_app() -> FastAPI:
             # UI with the bridge down (OPS-8). Hardware-transparent: this touches
             # broker metadata only, never the devices.
             logger.info("Marking WB virtual device cards offline...")
+            from locveil_bridge.infrastructure.devices.base import BaseDevice as _BaseDevice  # local: keep domain/ import-pure
             for port_device in device_manager.devices.values():
                 wb_dev = cast(_BaseDevice, port_device)
                 try:

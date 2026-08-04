@@ -104,6 +104,71 @@ async def test_on_connect_callbacks_fire_on_every_reconnect():
     assert fired["n"] == 2      # callback fired on both
 
 
+class _RefuseThenConnect:
+    """Models the never-yet-connected boot: `__aenter__` raises MqttError
+    (connection refused — the broker isn't up) for the first `refusals`
+    attempts, then enters cleanly and cancels out of the message loop the way
+    a shutdown would."""
+
+    def __init__(self, counters: dict, refusals: int):
+        self._counters = counters
+        self._refusals = refusals
+
+    async def __aenter__(self):
+        self._counters["attempts"] += 1
+        if self._counters["attempts"] <= self._refusals:
+            raise MqttError("connection refused")
+        return self
+
+    async def __aexit__(self, *_a):
+        return False
+
+    async def subscribe(self, *_a, **_k):
+        return None
+
+    @property
+    def messages(self):
+        return self._gen()
+
+    async def _gen(self):
+        raise asyncio.CancelledError()
+        yield  # noqa: unreachable — makes this an async generator
+
+
+@pytest.mark.asyncio
+async def test_boot_episode_never_gives_up_and_caps_backoff():
+    """CORE-16: the never-connected boot episode retries indefinitely with
+    capped backoff. The old loop gave up permanently after 5 attempts (~50 s)
+    — the 2026-08-01 power-outage boot survived on attempt 5/5 by luck; a
+    slightly slower network left MQTT dead for the process lifetime while the
+    HTTP healthcheck stayed green."""
+    c = _client()
+    counters = {"attempts": 0}
+    fired = {"n": 0}
+
+    async def on_connect():
+        fired["n"] += 1
+
+    c.on_connect_callbacks.append(on_connect)
+
+    REFUSALS = 20  # far beyond the old 5-attempt budget
+    sleep_mock = AsyncMock()
+    with patch(
+        "locveil_bridge.infrastructure.mqtt.client.Client",
+        side_effect=lambda *a, **k: _RefuseThenConnect(counters, REFUSALS),
+    ), patch(
+        "locveil_bridge.infrastructure.mqtt.client.asyncio.sleep", new=sleep_mock
+    ):
+        await c._run_mqtt_client({"hostname": "h", "port": 1883}, [])
+
+    assert counters["attempts"] == REFUSALS + 1  # survived past 5, connected in the end
+    assert fired["n"] == 1  # the eventual connect fired the on-connect callbacks
+    waits = [call.args[0] for call in sleep_mock.await_args_list]
+    assert waits[0] == 5  # backoff still ramps from the base
+    assert max(waits) == 60  # ...and is capped at the steady-state cadence
+    assert all(w <= 60 for w in waits)
+
+
 @pytest.mark.asyncio
 async def test_failing_on_connect_callback_does_not_break_the_loop():
     """A raising callback is isolated: the receive loop keeps running and the next

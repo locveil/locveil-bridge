@@ -874,7 +874,8 @@ endpoint).
   path's omission — the OLD image produced the identical hash 2026-08-02). Post-reload the fleet
   ran capability-less until a heal restart (verified restored: golden + 157 capabilities). Close
   decision = owner's: the extraction itself verified clean; the failing item re-verifies with
-  CORE-15's fix. Item A: `POST /reload`'s `reload_system_task` constructs + drives a concrete `MQTTClient` inline; extract an application-layer reload service (e.g. `app/reload_service.py`) so the router stays a thin adapter. **Gated on hardware** — touches the live MQTT-reconnect path; can't be safely HW-verified without you at the rack. **Completion goal = 100% clean hexagon (explicit, added 2026-07-07):** this task owns the **only** `ignore_imports` exception in the import-linter config (`presentation.api.routers.system -> infrastructure.mqtt.client`, backend `pyproject.toml`); done means (1) the reload service extracted and the back-edge gone from the code, (2) the **`ignore_imports` entry deleted** — the contract set (6 since CORE-6) passes with **zero exceptions**, (3) the "one documented exception" passages updated in `docs/architecture/overview.md` + the contract name/comment in `pyproject.toml` + the [[hexagonal-layering]] memory, (4) HW-verified at the rack: `POST /reload` still reconnects cleanly against the live broker. Item B (response DTO for `/config/system`) done in `73ee8d5` — new presentation `SystemConfigResponse` + nested DTOs; wire shape field-identical; `presentation/api/schemas.py` no longer imports the infra `SystemConfig`.
+  CORE-15's fix (LANDED 2026-08-04 — re-run the reload verify at the next deploy: catalog must
+  stay golden across `/reload`). Item A: `POST /reload`'s `reload_system_task` constructs + drives a concrete `MQTTClient` inline; extract an application-layer reload service (e.g. `app/reload_service.py`) so the router stays a thin adapter. **Gated on hardware** — touches the live MQTT-reconnect path; can't be safely HW-verified without you at the rack. **Completion goal = 100% clean hexagon (explicit, added 2026-07-07):** this task owns the **only** `ignore_imports` exception in the import-linter config (`presentation.api.routers.system -> infrastructure.mqtt.client`, backend `pyproject.toml`); done means (1) the reload service extracted and the back-edge gone from the code, (2) the **`ignore_imports` entry deleted** — the contract set (6 since CORE-6) passes with **zero exceptions**, (3) the "one documented exception" passages updated in `docs/architecture/overview.md` + the contract name/comment in `pyproject.toml` + the [[hexagonal-layering]] memory, (4) HW-verified at the rack: `POST /reload` still reconnects cleanly against the live broker. Item B (response DTO for `/config/system`) done in `73ee8d5` — new presentation `SystemConfigResponse` + nested DTOs; wire shape field-identical; `presentation/api/schemas.py` no longer imports the infra `SystemConfig`.
 
 - [ ] **CORE-4** `[P2]` `[deferred]` — **Full `POST /devices/{id}/action` demotion (release-2 candidate).** Decided at the release-1 sign-off (2026-07-06): `/action` ships in release 1 **as the documented internal/dev + UI-fallback door, untouched** — UI-9 removed its last first-party writer, but demoting it before the canonical hardware passes (REL-3, VWB-13) prove coverage would remove the safety net exactly when it might be needed. Post-release scope: strip the UI's un-annotated-control fallback dispatch paths, mark the endpoint internal in the OpenAPI docs (or move it under an internal prefix), and re-examine `/scenario/switch`+`/scenario/shutdown` internalization (the rest of `canonical_first.md` §8 phase 3) in the same pass.
 
@@ -965,9 +966,10 @@ endpoint).
   race fix itself** — cards present after a cold boot that loses the network race (the next
   power outage proves it for free, or simulate: stop mosquitto across a bridge container
   restart, start it >30 s later, confirm cards appear on connect — disruptive to the live
-  house, owner's call on timing; NB the broker must be back within ~50 s of the bridge's
-  FIRST connect attempt, or the CORE-16 retry-budget exhaustion kicks in and the simulation
-  demonstrates that bug instead of this fix).
+  house, owner's call on timing; NB on the RUNNING image the broker must be back within ~50 s
+  of the bridge's FIRST connect attempt or the old retry budget exhausts — CORE-16 (DONE
+  2026-08-04) removed that cap, so once the next deploy lands the simulation needs no timing
+  window at all: any broker-return delay works).
   The 2026-08-01 cold boot brought the container up before the host network: bootstrap's 30 s
   wait for MQTT timed out at 08:01:39 UTC (`WB emulation will be skipped` + `scenario WB cards
   skipped`), then connect attempt 5/5 SUCCEEDED at 08:02:00 — 20 s too late. Everything
@@ -991,45 +993,6 @@ endpoint).
   emulation setup silently skips publishing (exactly CORE-1's gap (4), fixed on main by the
   `ReloadService` extraction). Deploying current main is the companion op — and doubles as
   CORE-1's pending rack verify of `POST /reload`.
-
-- [ ] **CORE-15** `[P1]` — **`/reload` never re-attaches capability maps — the whole fleet runs
-  capability-less until the next container restart** (filed 2026-08-04 off the CORE-1 rack
-  verify; `review-then-remediate`). CONFIRMED LIVE on the deployed image: after `POST /reload`
-  completes successfully, all 79 catalog devices carry `capabilities: []`, the canonical
-  endpoint answers `capability_not_supported` for every capability (voice actuation dead), and
-  the retained `bridge/catalog/version` flips golden→`95e24c546adc0dac` (the capability-less
-  content hash — the same value the OLD image produced on 2026-08-02, proving the bug predates
-  the CORE-1 extraction; the "old image catalog code" attribution in the 2026-08-04 journal
-  entry was wrong and is superseded by this filing). Root cause: bootstrap runs
-  `attach_capability_maps(...)` (+ `validate_command_exposure`) after `initialize_devices`;
-  `app/reload_service.py` re-initializes the fleet but never re-attaches — device objects are
-  NEW instances, so the boot-time attachment dies with the old fleet. Layer-3 layouts and the
-  canonical dispatch both key off the attached maps. Scope: re-run the capability attachment
-  (and the exposure check) in the reload sequence right after `initialize_devices`, mirroring
-  bootstrap ordering; add a regression test pinning catalog-hash invariance across reload
-  (reload with unchanged config MUST republish the golden hash); heal path verified 2026-08-04
-  (restart → golden + 157 capabilities). Closing this also clears CORE-1's one failing verify
-  item (re-run the reload verify after landing).
-
-- [ ] **CORE-16** `[P1]` — **Boot-time MQTT retry budget is 5 attempts (~50 s) then permanent
-  give-up — a broker outage barely longer than the 08-01 one leaves MQTT dead while the
-  container reports healthy** (filed 2026-08-04 off the CORE-14 simulation prep — found by
-  reading `_run_mqtt_client` to time the broker-stop window). The connect loop caps
-  `max_retries = 5` with 5/10/15/20 s backoff: a boot whose broker isn't reachable within
-  ~50 s of the FIRST attempt logs `Max retries (5) reached. Giving up MQTT connection.` and
-  the loop EXITS — no further attempts, ever. CORE-14's on-connect callback can't help: it
-  fires on connect, and no connect ever comes. The 2026-08-01 outage recovered on attempt
-  5/5 — 20 more seconds of network delay and the house would have been card-less AND
-  catalog-less until a manual restart, with the container healthcheck GREEN throughout (it
-  probes HTTP only; uvicorn serves fine with MQTT dead — no restart pressure from docker or
-  systemd). CORE-9 made the budget per-episode for ESTABLISHED connections; the
-  never-yet-connected boot episode kept the hard cap. Scope: make the boot episode retry
-  indefinitely with capped backoff (e.g. cap at 60 s — the broker is on the same box; a
-  long-term-down broker needs an operator regardless), or equivalently treat "never
-  connected" as an episode that never exhausts; keep the logging cadence sane at the cap.
-  Pairs with CORE-14 (the remaining half of power-outage boot robustness). Decide at
-  implementation whether the healthcheck should reflect MQTT liveness (probably not — a
-  broker outage must not restart-loop the bridge; log-and-retry is the right posture).
 
 ### LIB — pymotivaxmc2 library (sibling repo)
 

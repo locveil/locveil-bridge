@@ -595,6 +595,57 @@ possible round-3.
 
 - [x] **CORE-11** `[P1]` — **DONE 2026-07-13** (board delegation **PROD-21**, council **HK-8**; normative `../locveil-commons/process/python-layout.md` §1 — product data lives at the repo root, config tree is `config/` singular, Dockerfiles in repo-root `docker/` built with root context). **Config tree → repo root; Dockerfiles → `docker/` with root build context.** Two commits, **NO contract cut** (golden byte-identical `5622ba7a1a78102a`). **(a) Config move** (`git mv backend/config → config`, all files pure renames): the `ConfigManager`/CLI default is the CWD-relative `"config"` and **stays relative** — the container resolves it via WORKDIR `/app` + the `/app/config` mount (a repo-relative anchor would break the container), so the only code change is the deployment-root convention, not the default value. **Cert-path coupling found in reconciliation** (this is what the delegation's "loader/CLI defaults" item was pointing at): LG TV device JSONs store cert paths as `config/devices/certs/*.pem`, validated relative to CWD = the deployment root; that root is now the repo root (was `backend/`), matching how the container resolves from `/app`. So the offline catalog build + the real `locveil-catalog`/`locveil-openapi` regen now run **from the repo root** (`uv run --project backend …`); `dump_catalog`'s `--output` default moved `../contracts/…` → `contracts/…`, `test_contracts_golden` builds under `monkeypatch.chdir(REPO)`, and the regen hint + `contracts/catalog/README` + `CONTRIBUTING` + `QUICKSTART` say so — verified the repo-root regen reproduces the byte-identical golden with the LG TVs present. **~15 test config anchors** retargeted to repo-root/`config` (`parents[2]→[3]`, `BACKEND→REPO`, the `"backend"/"config"` segment drop, a bare `open('config/…')` in `test_kitchen_hood_parameters`); walk-up discovery tests auto-adapt. `ops/update.sh` rsync source, compose comments, the CI path filters (**both** backend + ui jobs now list `config/**`), the `config-master-tree` invariant text, the manifest globs, and the two setup-flow diagrams (`.dot` + regenerated `.png`) all followed the move. **(b) Dockerfiles** (`git mv backend/Dockerfile → docker/Dockerfile.backend`, `ui/Dockerfile → docker/Dockerfile.ui`, both built with **root context**): backend COPYs re-prefixed (`src/`→`backend/src/`, `pyproject.toml uv.lock`→`backend/…`); **fixed the CORE-10 miss** `CMD ["wb-api"…]` → `["locveil-bridge"…]` (the retired script would have failed the container at start); the UI Dockerfile's `COPY backend/config` + `COPY backend/openapi.json` were **vestigial** (the build is typecheck + vite only, reading nothing outside `ui/` — its own comment said so) and were removed; CI `context`/`file` repointed for both jobs; the two component `.dockerignore`s merged into one root `.dockerignore` (both images now share the root context) and deleted. Both images **build clean** locally against the root context (native amd64). Gates: import-linter 6/6, pyright 0/0/0, pytest **725 passed**, contract-guard 0, docs-manifest 8/8, UI `check`+`build` green. docs: backend-readme, ui-readme, contributing, quickstart, contract/catalog, arch/ui, howto/new-device, howto/new-scenario, install, diagram/device-setup-flow, diagram/topology-setup-flow. Remaining PROD-21 bridge work: **OPS-26** (owner-gated `meta/driver` wire cutover).
 
+- [x] **CORE-15** `[P1]` — **DONE 2026-08-04** (filed + executed same day off the CORE-1 rack
+  verify; owner directive "fix both problems", scope extended at execution to the ENTIRE config
+  bundle on owner instruction — topology explicitly). **`/reload` now re-wires the full
+  composition: capability maps AND rooms/scenarios/topology.** The audit against bootstrap found
+  FOUR parity gaps, not one — the re-initialized fleet lost: (1) **capability maps** (canonical
+  answered `capability_not_supported` fleet-wide, the catalog published `capabilities: []` and
+  the retained version flipped golden→`95e24c546adc0dac` — confirmed live on both images);
+  (2) the **SSE `event_publisher`** (device state changes stopped reaching the UI event stream);
+  (3) the **problem-report `dispatch_ring`** (evidence rings empty); (4) the post-fleet config
+  consumers — `RoomManager.reload()` and `ScenarioManager.initialize()` were never called, so
+  rooms.json / scenarios / **topology.json** edits silently did not take effect on `/reload`
+  (the owner's suspicion, confirmed: topology loads ONLY in `ScenarioManager.initialize`).
+  **Fix shape — one recipe, no drift:** the post-`initialize_devices` wiring extracted to
+  module-level `wire_fleet(...)` in `app/bootstrap.py`, called by BOTH boot and reload (drift
+  between the two compositions is the root cause of this whole bug class — CORE-1's gaps (1–5)
+  plus these four); reload gains a `rewire_fleet` composition hook (the established CORE-1 hook
+  pattern — ReloadService stays composition-free) running `wire_fleet` + `room_manager.reload()`
+  + `await scenario_manager.initialize()`, deliberately NOT connection-gated (config reloads
+  even with the broker down). Scenario re-init is live-safe: restore is tracking-only (SCN-18,
+  zero device commands), observers survive, the WB `on_active_changed` re-point follows in
+  `rebuild_scenario_cards`. Tests: `test_wire_fleet.py` (collaborator assignment, attach +
+  exposure-check invocation, violations-warn-not-raise) + `test_reload_service.py` extended
+  (rewire called with the new composition; NOT connection-gated on timeout; init→rewire→
+  subscribe ordering). Suite **757**, pyright 0, contracts 6/6, openapi/golden byte-identical.
+  **Live re-verify rides the next deploy** — CORE-1's failing gate item (catalog stays golden
+  across `/reload`) re-runs then.
+  docs: none — `/reload`'s documented promise ("reload configs at runtime", interfaces.md) is
+  what this fix makes TRUE; no manifest node describes the internal reload composition.
+  contracts: none — no surface moved; golden byte-identical.
+
+- [x] **CORE-16** `[P1]` — **DONE 2026-08-04** (filed + executed same day; found by reading
+  `_run_mqtt_client` to time the CORE-14 simulation window). **The MQTT connect loop never
+  gives up.** Was: `max_retries = 5` (≈50 s of 5/10/15/20 s backoff) then `Max retries reached.
+  Giving up MQTT connection.` and the loop EXITED — a boot whose broker wasn't reachable within
+  ~50 s of the first attempt left MQTT dead for the process lifetime while the container
+  healthcheck stayed GREEN (HTTP-only probe; uvicorn serves fine with MQTT dead, so neither
+  docker nor systemd applies restart pressure). The 2026-08-01 outage survived on attempt 5/5
+  by luck. CORE-9 had made the budget per-episode for ESTABLISHED connections; the
+  never-yet-connected boot episode kept the hard cap. Now: `while True` with backoff
+  `min(5 s × attempt, 60 s)` — one attempt per minute steady-state (the broker is on the same
+  box); a successful connect still resets the episode (CORE-9 semantics preserved);
+  `CancelledError` still exits (shutdown path). CORE-14's on-connect card publishing now
+  composes correctly: whenever the broker appears — 50 seconds or 50 minutes later — the
+  connect lands and the cards publish. Test: `test_boot_episode_never_gives_up_and_caps_backoff`
+  (20 refusals then success: loop survives far past the old budget, the on-connect callback
+  fires on the eventual connect, backoff ramps from 5 s and caps at 60 s). Healthcheck stance
+  recorded as a decision: HTTP-only STAYS — a broker outage must not restart-loop the bridge;
+  log-and-retry is the correct posture. Suite **757**, pyright 0, contracts 6/6.
+  docs: none — no manifest node describes connection-retry mechanics.
+  contracts: none — no surface moved.
+
 ## LIB — pymotivaxmc2 library (sibling repo)
 
 - [x] **LIB-1** `[P1]` — **DONE 2026-07-15** (executed in `../pymotivaxmc2` per the workstream convention; commit `08073b3`, shipped in **pymotivaxmc2 0.8.0**, tag `v0.8.0` → PyPI via the library's gated CI; bridge repin same change). **Control-port transactions serialized — one in flight at a time (subsumes reply-correlation).** `Semaphore(5)` → `asyncio.Lock`: the device has vendor-confirmed limited processing power (openHAB: "subscribes to all channels simultaneously → grind to a halt") and one unkeyed reply queue, so concurrency both overloaded it and let transactions steal each other's replies (observed in production at wedge #3). Plus **stale-frame hygiene**: `SocketManager.drain()` before every send, and `_recv_expected()` discards mismatched frames within the deadline instead of burning a retry — a late reply from a timed-out attempt can no longer fail a fresh transaction (that conversion was the false-retry driver). Public API unchanged (concurrent callers queue). Library tests: serialization ordering, drain-before-send, stale-discard for command+subscribe; commands guide updated. Library gates: 276→295 tests across the sweep, import-linter 4/4, no-TYPE_CHECKING, pyright 0. docs: none — sibling-library internals; no bridge manifest node describes the library's transaction model (the library's own guides updated in its repo).
