@@ -17,11 +17,14 @@ on:
         default: true
 
 # Job graph (OPS-10): a `changes` job detects which areas a push touched and gates the
-# fast checks — backend-test runs only when backend/** changed, ui-validate when ui/**
-# OR the backend contract files the UI consumes changed, ledger-guard when docs/** or
-# the guard script changed, contract-guard when contracts/** or its vendored script
-# changed. Docs-only ledger commits (the most frequent kind) skip the test suites
-# entirely. The slow QEMU arm/v7 image builds (~14 min for the UI) remain
+# fast checks — backend-test runs only when backend/** (or a contract/config input of
+# its suite) changed, ui-validate when ui/** OR the backend contract files the UI
+# consumes changed, ledger-guard when docs/** or the guard script changed. The ONE
+# ungated check is contract-guard (OPS-38, council HK-13): it runs on every push —
+# a contract's enumerated artifacts need not live under contracts/, so a path gate can
+# skip the very edit the drift rule exists to catch. Docs-only ledger commits (the most
+# frequent kind) still skip the test suites; they pay only for the two stdlib guards.
+# The slow QEMU arm/v7 image builds (~14 min for the UI) remain
 # MANUAL ONLY (`gh workflow run "Build ARM Docker Images (backend + ui)"` or the Actions
 # "Run workflow" button), now with per-image toggles; a dispatch also forces the matching
 # fast checks, since each image build `needs` its green gate.
@@ -41,7 +44,6 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       ui: ${{ steps.filter.outputs.ui }}
       ledger: ${{ steps.filter.outputs.ledger }}
-      contracts: ${{ steps.filter.outputs.contracts }}
       workbench_plugin: ${{ steps.filter.outputs.workbench_plugin }}
     steps:
       # Full history: a multi-commit push must diff against the push base, not HEAD~1.
@@ -58,10 +60,20 @@ jobs:
               # drift guard (test_contracts_golden) + config-consuming tests, so a
               # config change must run the backend job.
               - 'config/**'
-              # committed contract artifacts (VWB-15): the backend suite carries the
-              # drift guard (test_contracts_golden), so a hand-edit of contracts/
-              # must run it.
+              # committed contract artifacts (VWB-15): the backend suite carries
+              # layer 2 for every contract here — the catalog drift guard
+              # (test_contracts_golden), the device-integration owner guard
+              # (test_device_integration_schema), the pin conformance tests
+              # (test_report_protocol_pin, test_core_py_pin_identity) — so any move
+              # under contracts/ (an artifact, a STAMP, a pin) must run it. Every
+              # STAMP-enumerated artifact lives under contracts/ today; an owned
+              # artifact homed elsewhere must be added to this list in the same
+              # change that enumerates it (OPS-38, HK-13: layer 2 runs when a
+              # contract moves).
               - 'contracts/**'
+              # the docs manifest: validated against the schema under contracts/ by
+              # test_docs_manifest, but it lives outside both trees above.
+              - 'docs/manifest.json'
               - '.github/workflows/build-arm.yml'
             ui:
               # ui/ plus the backend contract it consumes (openapi.json for codegen,
@@ -77,13 +89,6 @@ jobs:
               - '.scope-guard.toml'
               # the guard's claudemd hash rule (OPS-16) checks the pinned blocks in here
               - 'CLAUDE.md'
-            contracts:
-              - 'contracts/**'
-              - 'scripts/contract_guard.py'
-              - '.contract-guard.toml'
-              - 'scripts/repin.py'
-              - '.repin.toml'
-              - '.github/workflows/build-arm.yml'
             workbench_plugin:
               # the plugin consumes the backend OpenAPI contract the same way ui/
               # does (gen:api-types), so a contract change re-validates it too.
@@ -91,7 +96,7 @@ jobs:
               - 'backend/openapi.json'
               - '.github/workflows/build-arm.yml'
 
-  # --------------------------------------------------- fast checks (gated) ---
+  # ------------------------------- fast checks (gated, except contract-guard) ---
   ledger-guard:
     # docs/action_plan.md{,_DONE} single-source-of-scope check (single-task-ledger
     # invariant; DOC-4, cut over to the commons scope-guard by OPS-22 — vendored at
@@ -115,10 +120,10 @@ jobs:
     # in .contract-guard.toml); semantics stay in the backend suite's conformance
     # tests. Local-only by design — it never reaches across repos. Strict here —
     # no --relax-tags: the pushed tag must exist (the hook relaxes, CI doesn't).
+    # UNGATED since OPS-38 (council HK-13, contracts.md §4): no `needs: changes`, no
+    # path filter — every push, pull request and dispatch runs it, repin step included.
     name: Contract coherence guard
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.contracts == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -132,6 +137,8 @@ jobs:
       # HK-12 §5 ordinary-CI severity (OPS-33): pin/tool staleness fails only on a
       # MAJOR family gap or a never-pinned declared family. Remote-first tokenless
       # ls-remote (org repos are public); release flows run --fail-on any manually.
+      # Touch-the-family and the image-dispatch gate need repin v2 — they arrive
+      # with the re-vendor (OPS-39); until then this flat level stays.
       - name: Pin staleness (repin, vendored at repin-v1)
         run: python3 scripts/repin.py --check --fail-on major
 

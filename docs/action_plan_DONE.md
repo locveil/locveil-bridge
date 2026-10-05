@@ -619,6 +619,31 @@ possible round-3.
   every pin + all three tools current); `.scope-guard.toml` header + CI comment re-truthed.
   Hook/CI invocations unchanged. docs: none — enforcement tooling.
   contracts: scope-guard consumed-tool pin bumped v7.1→v7.2 (no pin content moved).
+- [x] **OPS-38** `[P1]` `[release]` — **DONE 2026-10-05** (filed + executed same day; board
+  **PROD-28** bridge delegation (b), the half that needs no new tooling; council **HK-13**
+  decision 8; lead VWB-44). **Wave-0 CI: the contract guard runs on every push; layer 2 runs
+  whenever a contract moves.** **(a) Un-gated:** the `contract-guard` job in
+  `.github/workflows/build-arm.yml` lost `needs: changes` and its `if:` — every push, pull
+  request and dispatch now runs `contract_guard.py --check` (strict) and the existing
+  `repin.py --check --fail-on major` step; the `contracts` output and filter left the `changes`
+  job (nothing else read them). The reason, recorded in the workflow: an enumerated artifact need
+  not live under `contracts/`, so a path gate can skip the very edit the drift rule exists to
+  catch. Cost: two stdlib scripts and a shallow tag fetch on docs-only commits. **(b) Layer 2
+  (narrowed at intake — mostly already true):** `contracts/**` has triggered `backend-test` since
+  VWB-15, and every STAMP-enumerated artifact of both owned families plus both pins lives under
+  it — verified, and the filter comment now names the four layer-2 tests and states the rule for
+  the future (an owned artifact homed outside `contracts/` joins the filter in the change that
+  enumerates it). The one residual hole closed: `docs/manifest.json` added to the `backend`
+  filter — its coherence test rides the backend suite and never ran on a manifest-only edit.
+  **(c)** `--fail-on major` unchanged; touch-the-family and the image-dispatch gate need repin
+  v2 and stay with OPS-39 (comment in the workflow says so). **(d)** `CONTRIBUTING.md` CI
+  section re-truthed (guard ungated, the backend trigger list, the docs-only-commit sentence).
+  Not closed here, by design: a docs-only ledger
+  commit still skips the backend suite, so the docs-verdict-resolves check in
+  `test_docs_manifest.py` runs at the next backend-touching push, not on the ledger commit
+  itself — a docs-coherence gap, not a contract one.
+  docs: contributing
+  contracts: none — CI wiring only; no surface, stamp or pin moved.
 
 ## CORE — Backend core / architecture
 

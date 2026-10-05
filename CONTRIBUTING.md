@@ -189,15 +189,17 @@ UI build consumes.
 ## CI gates each commit must clear
 
 One workflow, path-filtered: a `changes` job detects which areas the push
-touched and gates everything downstream, so a commit only pays for the checks
-its files can break.
+touched and gates the test jobs, so a commit only pays for the checks its
+files can break. One check is deliberately not gated: the contract guard runs
+on every push.
 
 - **`ledger-guard`** (docs/** or the guard script/config changed) —
   `scripts/scope_guard.py --config .scope-guard.toml`, the ledger-discipline
   check (a vendored copy of the shared Locveil scope-guard). The same check
   runs pre-commit via the committed hook — enable it once per clone with
   `git config core.hooksPath hooks`.
-- **`backend-test`** (backend/** or contracts/** changed) — the three Python
+- **`backend-test`** (backend/**, config/**, contracts/** or
+  `docs/manifest.json` changed) — the three Python
   health gates (import-linter / no-TYPE_CHECKING / pyright) + `pytest -m "not
   requires_device"` on amd64. The suite includes the **contracts drift guard**
   (`test_contracts_golden.py`): the committed `contracts/catalog/` artifacts
@@ -209,11 +211,14 @@ its files can break.
   file is a **contract cut** — bump the contract version first, tag the landing
   commit; the steps are in `contracts/catalog/README.md` → Regeneration, the
   version levels in `contracts/catalog/catalog-contract.md`.
-- **`contract-guard`** (contracts/** or its vendored script changed) —
+- **`contract-guard`** (every push, no path filter) —
   `scripts/contract_guard.py --check`, the contract-coherence check (layout,
-  stamps, pinned-copy hashes; a vendored copy of the shared Locveil
-  contract-guard). It runs pre-commit too, via the same committed hook as the
-  ledger guard.
+  stamps, pinned-copy hashes, a versioned artifact edited without a version
+  move; a vendored copy of the shared Locveil contract-guard), followed by the
+  pin-staleness check (`scripts/repin.py --check`). It runs pre-commit too, via
+  the same committed hook as the ledger guard. The semantic half — does the
+  code still honor each contract — is the backend suite, which is why any
+  change under `contracts/` runs `backend-test` as well.
 - **`ui-validate`** (ui/** changed, **or** the backend contract the UI
   consumes: `backend/openapi.json`, `config/**`) — `gen:api-types` +
   `check` (typecheck, strict lint, orphans) + `build`.
@@ -224,8 +229,8 @@ its files can break.
   dispatch also runs the matching fast checks — each image build needs its
   gate green.
 
-A docs-only commit runs just the ledger guard; a backend contract change
-re-validates the UI too. If you change a Dockerfile or anything in `ops/`,
+A docs-only commit runs just the ledger guard and the contract guard; a
+backend contract change re-validates the UI too. If you change a Dockerfile or anything in `ops/`,
 dispatch the slow workflow before relying on `:latest`.
 
 ## How-to references

@@ -849,21 +849,6 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
-- [ ] **OPS-38** `[P1]` `[release]` — **Wave-0 CI: contract guard on every push; layer 2 runs when
-  contracts move** (board **PROD-28** bridge delegation (b), the half that needs no new tooling;
-  council **HK-13** decision 8; lead VWB-44; filed at intake 2026-10-05). **Scope:** the
-  `contract-guard` job in `.github/workflows/build-arm.yml` (and its existing repin step) loses its
-  path gate — it runs on every push (owned artifacts need not live under `contracts/`, so a gated
-  job can miss the very edit the drift rule exists to catch); the now-unused `contracts` filter
-  leaves the `changes` job; `--fail-on major` stays as is. **Intake reconciliation (partially
-  addressed — narrowed):** the layer-2 half is ALREADY satisfied for both owned families and both
-  pins — `contracts/**` has been in the `backend` filter since VWB-15 and every enumerated artifact
-  lives under `contracts/` (the core-py importable copy is under `backend/`); the one residual
-  hole is `docs/manifest.json` (the docs-manifest STAMP's `artifact`, outside both trees — its
-  coherence test rides the backend suite and never ran on a manifest-only edit): add it to the
-  `backend` filter. CI prose in `CONTRIBUTING.md` re-truthed in the same change. **Deferred to
-  OPS-39 (needs repin v2):** touch-the-family and the image-dispatch gate.
-
 - [ ] **OPS-39** `[P1]` `[release]` — **PROD-28 sweep: re-vendor the HK-13 tag set, migrate
   `.repin.toml`, re-pin, wire the release gates** (board **PROD-28** bridge delegation (b) second
   half + (c); council **HK-13**; lead VWB-44; filed at intake 2026-10-05). **BLOCKED on the commons

@@ -28,6 +28,15 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — OPS-38 DONE: the contract guard runs on every push.** HK-13's wave 0 for the
+  bridge turned out to be half done already: `contracts/**` has pulled the backend suite since
+  VWB-15, so layer 2 was running on every contract move — the delegation's worry was voice's
+  hole, not ours. What was real: the layer-1 job sat behind a path filter, and
+  `docs/manifest.json` could change without its coherence test running. Both closed — the
+  `contract-guard` job is now the workflow's one ungated check, and the manifest joined the
+  backend trigger. The flat `--fail-on major` stays until repin v2 brings touch-the-family and
+  the dispatch gate (OPS-39).
+
 - **2026-10-05 — VWB-45 DONE: the device-integration README split,
   `device-integration-v1.2.0`.** The second owner cut. The convention's whole normative text
   moved into `contracts/device-integration/convention.md` (pinned); the README shrank to an
