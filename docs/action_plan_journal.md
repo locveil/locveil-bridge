@@ -28,6 +28,25 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — PROD-28 intake (council HK-13): five tasks filed, lead VWB-44.** The board's
+  bridge delegation pulled and verified against the repo per `task-start-reconciliation`. Filed,
+  all `[release]` by owner ruling: **VWB-44** (catalog README split → `catalog-v1.10.0`),
+  **VWB-45** (device-integration README split → `device-integration-v1.2.0`), **OPS-38** (wave-0
+  CI), **OPS-39** (the sweep — blocked on the commons tag set), **DOC-19** (docs-manifest remodel —
+  blocked on `docs-manifest-schema-v1.0.0` + the sweep). Narrowings recorded in the entries: the
+  catalog version constant lives in `presentation/api/catalog.py`, not the generator the delegation
+  names; the layer-2 CI trigger already covered `contracts/**` (VWB-15) — the residual hole is
+  `docs/manifest.json`; the registry loses its historical `catalog-v1.5` string ahead of guard v4's
+  registry-version rule. Both DOC-19 findings confirmed live (the "verbatim" schema copy lacks
+  commons' `$comment` property; tag `docs-manifest-v1` exists despite the "no tag" prose).
+  **Delegation item (e):** VWB-39's text reconciled in place — an owner does not pin its own
+  family, the hand-copy pin recipe is dead, the version named was two cuts old; the task is now
+  a conformance lock on the owned convention, and the "pinned descriptor" wording in the
+  EspManagedDevice design is handed to DRV-37's intake. **CORE-12** annotated: the batching
+  proposal was withdrawn in council, so its schema exposure takes the catalog version AFTER the
+  split. The REL section's stale "only open `[release]` task is VWB-16" line re-truthed. No
+  execution in this change — filing only.
+
 - **2026-08-04 (night) — CORE-1 and CORE-14 BOTH CLOSED: the deploy + two live verifies.**
   Owner deployed the CORE-15/16 image, then ordered the verifies. **`/reload` re-verify
   (closes CORE-1):** every gate item passed — clean ReloadService sequence, 14 cards + the

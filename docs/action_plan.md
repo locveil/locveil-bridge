@@ -640,16 +640,73 @@ endpoint).
 
 - [ ] **VWB-34** `[P2]` `[deferred]` — **Publish confirmation-timing in the contract — design** (`design-then-implement`; filed 2026-07-10 off the DRV-29 post-mortem chat: "your HTTP timeout must exceed 15 s" is contract information currently delivered out-of-band in a handover note — the same coupling class DRV-29 fixed, one layer up: retune a gate to 30 s and voice's timeouts fire again with no signal in the pinned catalog). **Cross-repo** — intended for delegation to the board once board-as-outbox lands (Domovoy arc); the voice side co-owns the consumption design (example on the table: implement scenario startup as a *durable action* on the voice side). Three tiers established in the chat analysis, to be confirmed/refined by the design: **(1) capabilities** — publish a client-meaningful optional `confirm_timeout_ms` per capability (present only when gated), derived from but NOT exposing the internal `gate` object (the gate is implementation — reconciler polling cadence; the latency promise is contract — keeps internals re-tunable without a re-pin); consumers: voice sizes per-capability HTTP timeouts and can auto-choose `wait:false` + optimistic speech for slow capabilities instead of hardcoding device lists; the UI's HvacPanel shows an honest progress expectation; extends VWB-24's zero-round-trip philosophy (catalog says what's valid → now also what to expect). **(2) scenarios** — a static estimate would lie (switch duration is diff-dependent: warm shared devices ≈ seconds, cold start ≈ the critical path); the honest publishable fact is an **upper bound** `max_duration_ms`, mechanically derivable from the cold-start plan (step gates + IR delays along the critical path) — a ceiling for client timeouts, never exceeded, usually beaten; progress narration uses the existing SSE state stream, not a number. **(3) async composites** — the fully clean answer for long-running composites is the async-job pattern (`202 Accepted` + progress events + completion event, dissolving the timeout question; the durable-action idea lives here) — a real API redesign touching voice + UI both, deliberately the design's decision whether/when, NOT presumed. Contract cost when implemented: catalog model + derivation + golden/openapi re-pin + voice re-pin — batch with an adjacent deliberate contract cut (OPS-16 tagging discipline applies). Deliverable: design doc + filed implementation follow-up(s).
 
-- [ ] **VWB-39** `[P2]` `[deferred]` — **Descriptor-pin conformance test (PROD-15 bridge delegation,
-  item 4; the VWB-37 pattern).** VWB-38's versioned artifact EXISTS (`device-integration-v1`, DONE
-  2026-07-12): pin it (the report-protocol pin recipe — byte-identical copy, tag-verified; org pin
-  shape at `contracts/pins/<name>/` since VWB-40) and lock the bridge-side
-  consuming surface to the pin with a unit test (`test_report_protocol_pin.py` shape). **Activates
-  alongside DRV-37** (the implementation — DRV-36 was design-only; the consuming constants land in
-  DRV-37), i.e. at the satellite's first conforming descriptor (the PROD-20 chain). *(Dep line
-  re-anchored 2026-07-14, DOC-16 — the old text named done-VWB-38 as pending and "DRV-36's
-  implementation".)*
+- [ ] **VWB-39** `[P2]` `[deferred]` — **Descriptor conformance test — the bridge-side consuming
+  surface locked to the OWNED convention (PROD-15 bridge delegation, item 4; the VWB-37 pattern).**
+  *(Text reconciled 2026-10-05 at the PROD-28 intake, delegation item (e) — three stale claims
+  removed: (1) "pin `device-integration-v1`" — the bridge OWNS that family (`contracts/device-integration/`;
+  owned families never enter `.repin.toml`), an owner does not pin its own surface, and the version
+  named is two cuts old (`v1.1` since VWB-42, `v1.2.0` after VWB-45); (2) "the report-protocol pin
+  recipe — byte-identical copy" — hand-copy recipes are dead: pins move only by the vendored repin
+  tool (OPS-33; HK-13 deletes the manual recipes org-wide); (3) the old title's "descriptor-pin"
+  conflated two things the convention keeps apart — see below.)* **Scope as reconciled:** a unit test
+  (`test_report_protocol_pin.py` shape, minus the pin folder) that locks DRV-37's consuming constants
+  — the convention MAJOR it accepts, the known `profile` set, the schema it validates descriptors
+  against — to `contracts/device-integration/STAMP.json` + `device-descriptor.schema.json`, so the
+  consuming code cannot drift from the surface this repo itself publishes. The runtime-served
+  `convention` value carries the MAJOR only (`process/contracts.md` §3, HK-13), so minor/patch cuts
+  of the family never move what the test or a fielded device compares. **Left to DRV-37 (not decided
+  here):** how the satellite's device descriptors reach `config/descriptors/` — per
+  `process/contracts.md` §1 a per-instance descriptor validated against the convention schema is
+  CONFIG, not a contract pin; [`docs/design/esp_managed_device.md`](design/esp_managed_device.md) §2
+  words it as a "pinned descriptor" and names "the VWB-39 pin" for the schema — DRV-37's intake
+  reconciles that wording against the convention before building. **Activates alongside DRV-37**
+  (the implementation — DRV-36 was design-only; the consuming constants land in DRV-37), i.e. at the
+  satellite's first conforming descriptor (the PROD-20 chain). *(Dep line re-anchored 2026-07-14,
+  DOC-16.)*
 
+- [ ] **VWB-44** `[P1]` `[release]` — **Catalog README split — contract cut `catalog-v1.10.0`**
+  (board **PROD-28** bridge delegation (a), first half; council **HK-13** decision 5, reserved
+  names. **LEAD ID of the PROD-28 bridge set: VWB-44 · VWB-45 · OPS-38 · OPS-39 · DOC-19** —
+  pulled + verified at intake 2026-10-05; all five `[release]` by owner ruling q8). The rule: inside
+  a pin folder `README.md` belongs to the consumer, so an owner never enumerates one — normative
+  prose a consumer must hold moves to a named, enumerated guide. **Scope:** new enumerated
+  `contracts/catalog/catalog-contract.md` (param semantics + the versioning rule, re-written to
+  the three-level rule: major = breaking, minor = surface changed incl. the pinned set gaining a
+  file, patch = enumerated bytes moved with no surface change); `contracts/catalog/README.md` stays
+  UNLOCKED and un-enumerated (intro, version changelog, file list, regeneration how-to, drift-guard
+  and realism notes); generator artifacts list; `CONTRACT_VERSION` → `"1.10.0"` (three-part from
+  here on; old tags frozen); the version-triple test; `docs/manifest.json` (new canonical node +
+  root for the guide); registry row; tag `catalog-v1.10.0` on the landing commit, pushed with it.
+  This is a MINOR cut (the pinned set gains a file). **Must land before contract-guard v4 is
+  vendored** (v4 fails an enumerated README at the owner; v3.1 accepts either shape).
+  **Intake reconciliation (valid, three narrowings):** (i) the delegation's "three-level versions
+  in `dump_catalog.py`" — the version constant and its rule comment live in
+  `presentation/api/catalog.py`; `dump_catalog.py` holds the artifacts list and derives the tag —
+  both move. (ii) Two README sentences are stale beyond the delegation's list and are fixed in the
+  cut: "the voice side pins into commons" (voice also holds a local pin) and "the golden's content
+  hash moves with zero contract change" (since HK-13 a config-driven refresh of the enumerated
+  golden is a PATCH cut). (iii) Registry rule (guard v4): a `<family>-v<digits>` string in
+  `contracts/README.md` must equal the current STAMP/PIN tag — the catalog row's
+  "(first: `catalog-v1.5`)" leaves the registry here (history stays in the README changelog).
+  Re-pin owed on completion: voice (both destinations), commons.
+
+- [ ] **VWB-45** `[P1]` `[release]` — **Device-integration README split — contract cut
+  `device-integration-v1.2.0`** (board **PROD-28** bridge delegation (a), second half; council
+  **HK-13** decision 5; lead VWB-44; filed at intake 2026-10-05). Same rule as VWB-44, separate
+  family, separate commit + tag. **Scope:** new enumerated
+  `contracts/device-integration/convention.md` holding the normative text (who must conform, the
+  `wb-mqtt-v1` profile, REST URL conventions, the descriptor + its test-locked example,
+  pin/conformance rules — versioning bullet re-written to the three-level rule and three-part
+  tags); `contracts/device-integration/README.md` becomes a thin UNLOCKED index + history; the
+  hand-written STAMP (`version` `"1.2.0"`, `tag`, `date`, `artifacts` = convention + schema +
+  example fixture); `test_device_integration_schema.py` (the guide-equals-fixture check re-points
+  at `convention.md`); the convention's vocabulary cross-link → the catalog guide
+  (`../catalog/catalog-contract.md`, exists after VWB-44 — so this runs second);
+  `docs/manifest.json` (new canonical node + root); registry row (current-version string →
+  `device-integration-v1.2.0`). MINOR cut (pinned set gains a file; schema + example fixture
+  byte-identical; the served `convention` value stays `1`). **Intake reconciliation: valid as
+  delegated.** Re-pin owed on completion: satellite (a FIRST pin — their DES-4, amended by PROD-28
+  to wait for this cut).
 
 ### UI — config-ui
 
@@ -836,6 +893,42 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
+- [ ] **OPS-38** `[P1]` `[release]` — **Wave-0 CI: contract guard on every push; layer 2 runs when
+  contracts move** (board **PROD-28** bridge delegation (b), the half that needs no new tooling;
+  council **HK-13** decision 8; lead VWB-44; filed at intake 2026-10-05). **Scope:** the
+  `contract-guard` job in `.github/workflows/build-arm.yml` (and its existing repin step) loses its
+  path gate — it runs on every push (owned artifacts need not live under `contracts/`, so a gated
+  job can miss the very edit the drift rule exists to catch); the now-unused `contracts` filter
+  leaves the `changes` job; `--fail-on major` stays as is. **Intake reconciliation (partially
+  addressed — narrowed):** the layer-2 half is ALREADY satisfied for both owned families and both
+  pins — `contracts/**` has been in the `backend` filter since VWB-15 and every enumerated artifact
+  lives under `contracts/` (the core-py importable copy is under `backend/`); the one residual
+  hole is `docs/manifest.json` (the docs-manifest STAMP's `artifact`, outside both trees — its
+  coherence test rides the backend suite and never ran on a manifest-only edit): add it to the
+  `backend` filter. CI prose in `CONTRIBUTING.md` re-truthed in the same change. **Deferred to
+  OPS-39 (needs repin v2):** touch-the-family and the image-dispatch gate.
+
+- [ ] **OPS-39** `[P1]` `[release]` — **PROD-28 sweep: re-vendor the HK-13 tag set, migrate
+  `.repin.toml`, re-pin, wire the release gates** (board **PROD-28** bridge delegation (b) second
+  half + (c); council **HK-13**; lead VWB-44; filed at intake 2026-10-05). **BLOCKED on the commons
+  wave-1 tag set** (`contract-guard-v4.0.0`, `repin-v2.0.0`, the next `scope-vX` carrying the
+  re-worded contract-triad block, `report-protocol-v1.0.1`) — one sweep, after VWB-44 + VWB-45
+  have landed (guard v4 fails an enumerated README at the owner). **Scope:** (1) re-vendor
+  `scripts/contract_guard.py` @ `contract-guard-v4.0.0`, `scripts/repin.py` @ `repin-v2.0.0`,
+  `scripts/scope_guard.py` + the pinned CLAUDE.md contract-triad block @ the new scope tag (block
+  hash in `.scope-guard.toml`); (2) migrate `.repin.toml` — drop the per-family `files` lists (the
+  pin file set derives from the owner's STAMP `artifacts` at the tag), `[[tool]]` entries gain
+  path + sha256; (3) re-pin `report-protocol` at `report-protocol-v1.0.1` (and any other consumed
+  family the tag set moved — check `core-py` at execution); (4) CI: touch-the-family via repin's
+  diff-base mode, the image-dispatch gate (families fail on a minor-or-major gap; patch and
+  `[[tool]]` gaps warn), replacing today's flat `--fail-on major` where the new levels apply;
+  (5) clear whatever v4 reports on first run — known candidates: vendored-tool tag strings in
+  comments/registry prose, the `docs-manifest` legacy STAMP WARN (retired by DOC-19), pointer
+  fields that must resolve. **Intake reconciliation: valid; claims verified against the repo** —
+  both `[[family]]` blocks carry `files`, the three `[[tool]]` entries carry `pinned_tag` only,
+  the report-protocol pin sits at `report-protocol-v1`, the contract-triad block is marked
+  `scope-v7.1`. Not startable until commons tags; the coordinator's follow-up message opens it.
+
 
 ### CORE — Backend core / architecture
 
@@ -881,7 +974,10 @@ endpoint).
   adapter; **zero new import-linter exceptions**. **HARD GATE (binding condition, board PROD-24/PROD-4):
   the endpoints must be unreachable until PROD-4's auth decision lands** — code may land behind a
   disabled feature flag, reachability may not. OpenAPI/`contracts/` regen + UI types ride whichever
-  change first exposes the schema.
+  change first exposes the schema. *(Catalog version note, PROD-28 intake 2026-10-05 — council
+  HK-13: the proposal to batch this schema exposure with the README-split cut was WITHDRAWN. The
+  split takes `catalog-v1.10.0` on its own (VWB-44); CORE-12's exposure cuts the NEXT catalog
+  version after it — a minor, three-part: `catalog-v1.11.0` unless another cut lands first.)*
 
 - [ ] **CORE-13** `[P2]` `[deferred]` — **Config-driven driver activation** (CORE-7 follow-up,
   filed off the 2026-07-18 findings analysis; `design-then-implement` — a short design note, and
@@ -935,10 +1031,29 @@ all done; DOC-7 folded into DOC-9.
 
 - ~~**DOC-11**~~ — *reconcile `docs/architecture/ui.md` with canonical-first dispatch; **folded into REL-4** at the release-1 sign-off (2026-07-06, DOC-7→DOC-9 precedent). The finding: the "Scenario manifests — same shape, different routing" section still describes pre-SCN-6 dispatch (controls posted at role devices; since SCN-6 they dispatch through the room's Scenario Manager entity) and claims the `source` device contributes an input-dropdown (scenario manifests deliberately render no inputs control); canonical dispatch as the UI's only write path is explained nowhere.*
 
+- [ ] **DOC-19** `[P1]` `[release]` — **docs-manifest remodel: the schema copy becomes a pin of
+  `docs-manifest-schema`; the internal STAMP retires** (board **PROD-28** bridge delegation (d);
+  council **HK-13** decision 6, partially reversing HK-6; lead VWB-44; filed at intake
+  2026-10-05). `docs/manifest.json` is instance data (`process/contracts.md` §1); the contract is
+  the commons-owned schema. **BLOCKED on commons cutting `docs-manifest-schema-v1.0.0`** and on
+  OPS-39's repin v2 re-vendor (the pin is taken with the vendored tool, never by hand) — rides the
+  sweep, its own commit. **Scope:** declare the family in `.repin.toml` and pin it to
+  `contracts/pins/docs-manifest-schema/`; `test_docs_manifest.py` validates against the pinned
+  schema and becomes the pin's named conformance test; `contracts/docs-manifest/` (README, STAMP,
+  hand copy) retires — the `docs-manifest-v1` git tag stays as frozen history; registry rows moved
+  (Owned → Consumed); `docs/manifest.json` nodes/roots follow (the retired README's node leaves by
+  tombstone per the node policy; the pin README, if any, registers). **Intake reconciliation:
+  valid; both findings verified** — (1) the "verbatim" copy HAS drifted: commons'
+  `process/user-docs/manifest.schema.json` carries a node-level `$comment` property the bridge copy
+  lacks; (2) the "no git tag is cut" prose (the folder README + the registry row) is false — tag
+  `docs-manifest-v1` exists in this repo. Both are re-truthed by retiring the folder, not by
+  editing it. Bridge dissent on the `[release]` tag is on record in HK-13 (this task only waits on
+  commons cuts); ruling accepted.
+
 ### REL — Release
 
-*(All `[release]` REL tasks complete — see `docs/action_plan_DONE.md`. The only open `[release]`
-task anywhere is VWB-16, gated on voice TEST-18 fixtures, off the critical path.)*
+*(All `[release]` REL tasks complete — see `docs/action_plan_DONE.md`. Open `[release]` tasks live
+in their workstream sections — grep the tag; re-truthed 2026-10-05 when the PROD-28 set was filed.)*
 
 
 ---
