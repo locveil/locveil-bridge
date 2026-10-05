@@ -48,7 +48,7 @@ locveil-commons (convention: `../locveil-commons/process/council.md`); decisions
 the board, never in chat.
 <!-- locveil:end cross-repo-board -->
 
-<!-- locveil:begin contract-triad scope-v7.3.0 -->
+<!-- locveil:begin contract-triad scope-v7.3.1 -->
 **Locveil contract triad** — digest; normative: `../locveil-commons/process/contracts.md`
 (§2–§5; HK-5, HK-12, HK-13) + `process/ledger-discipline.md` §7. On disagreement those
 files win. Never edit this block in place — edit in commons, then re-pin
@@ -69,8 +69,8 @@ files win. Never edit this block in place — edit in commons, then re-pin
 - **contracts-verdict** — every completion entry records `contracts: <what moved>` or
   `contracts: none — <why>`; "moved" = created, bumped, or FIRST CONSUMED a cross-repo
   surface; owner-side bumps add `re-pin owed: <consumers>`.
-- **enforcement (§4–§5)** — both guards run in the hook and on EVERY push, no path gate;
-  layer-2 tests run when contracts move; pre-commit staleness only warns; push CI fails
+- **enforcement (§4–§5)** — contract-guard and repin run in the hook and on EVERY push,
+  no path gate (the ledger guard keeps its own); layer-2 tests run when contracts move; pre-commit staleness only warns; push CI fails
   on a major gap or touch-the-family, release/dispatch gates on minor-or-major; the
   `.repin.toml` `[[tool]]` manifest pins vendored tools by tag + sha256.
 <!-- locveil:end contract-triad -->

@@ -28,6 +28,14 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — OPS-40 DONE: scope-v7.3.1, the same day as v7.3.0.** The sweep's last check
+  (`repin --check --fail-on any`) came back with one stale tool that had been current minutes
+  earlier: commons patched the contract-triad block's wording while the bridge was mid-sweep —
+  "both guards run on every push" could be read as including the ledger guard, which keeps its
+  path gate. Re-vendored with the tool (script bytes unchanged), block text re-pinned, hash
+  updated. Worth noting as the first live run of the v2 loop end to end: the staleness check
+  noticed, one command re-vendored, the recorded sha256 proved nothing else moved.
+
 - **2026-10-05 — UI-22 DONE: the Workbench plugin contract is pinned and tested.** The plugin
   had been building against the commons contract through a bare `file:` link since UI-18 —
   consumed, never pinned. Commons shipped the machine schemas today (`workbench-v1.3.0`), so

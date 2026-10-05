@@ -712,6 +712,23 @@ possible round-3.
   contracts: report-protocol re-pinned v1 → v1.0.1 (bytes-only owner patch); core-py pin
   re-stamped at v1.1 (no content moved); consumed-tool pins bumped — contract-guard v3.1 →
   v4.0.0, repin v1 → v2.0.0, scope-guard v7.2 → v7.3.0 (+ the contract-triad block text).
+- [x] **OPS-40** `[P2]` `[release]` — **DONE 2026-10-05** (filed + executed same change, the
+  OPS-36/OPS-37 pattern; found by the PROD-28 sweep's own finish-line check — commons cut
+  `scope-v7.3.1` while the sweep was running, so `repin --check --fail-on any` went from clean
+  to one stale tool between two runs; council **HK-13** family, lead VWB-44). **scope-guard
+  re-vendored @ `scope-v7.3.1`; contract-triad block re-pinned.** v7.3.1 is a block wording
+  patch (commons IMPL-22): the block's enforcement line said "both guards run … on EVERY push,
+  no path gate", which read as including the ledger guard and so contradicted the
+  shared-invariants block's path-gated ledger-guard job; it now names contract-guard and repin
+  and says the ledger guard keeps its own gate — which is exactly this repo's CI since OPS-38.
+  Script bytes unchanged (still scope-guard 1.4.1, sha `294cf411…`); re-vendored via
+  `repin.py tool scope-guard` so `.repin.toml` records the new tag. CLAUDE.md block replaced
+  verbatim from the tag, marker `scope-v7.3.1`, sha256 in `.scope-guard.toml` → `eb3a35f5…`
+  (equals commons'). `repin --check --fail-on any` exits 0 again; guard v4 0 failures,
+  0 warnings.
+  docs: none — pinned process block + enforcement tooling; no manifest node describes it.
+  contracts: scope-guard consumed-tool pin bumped v7.3.0 → v7.3.1 (script bytes identical; the
+  contract-triad block text moved).
 
 ## CORE — Backend core / architecture
 

@@ -70,7 +70,7 @@ owner_repo = "locveil-commons"
 owner_dir = "../locveil-commons"
 owner_url = "https://github.com/locveil/locveil-commons.git"
 path = "scripts/scope_guard.py"
-pinned_tag = "scope-v7.3.0"
+pinned_tag = "scope-v7.3.1"
 sha256 = "294cf4111c7e3e1914b6014c88d99558e3cebaeb736341110208d39bf1e76ba7"
 
 [[tool]]

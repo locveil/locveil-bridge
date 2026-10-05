@@ -109,7 +109,7 @@ jobs:
   ledger-guard:
     # docs/action_plan.md{,_DONE} single-source-of-scope check (single-task-ledger
     # invariant; DOC-4, cut over to the commons scope-guard by OPS-22 — vendored at
-    # scope-v7.3.0 since OPS-39, config in .scope-guard.toml). Standalone job: scope drift lives in
+    # scope-v7.3.1 since OPS-40, config in .scope-guard.toml). Standalone job: scope drift lives in
     # docs/, and docs-only commits skip backend-test — the guard must not ride a job
     # that gets skipped.
     name: Ledger scope-drift guard
