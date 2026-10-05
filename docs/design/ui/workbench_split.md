@@ -64,7 +64,8 @@ their *write path* (§3); it does not re-litigate their content.
   the shell-served import map — never TS sources); the shell's owner-edited config
   lists the **location only** (dev-phase: the sibling `dist/` path). The descriptor
   compiles against **`locveil-workbench/contract`** (the shipped shell's types-only
-  export). **Peer mismatch = strict refuse-and-surface**: a plugin whose `peers`
+  export — since UI-23 resolved by the plugin's tsconfig to the pinned copy at
+  `contracts/pins/workbench/contract.ts`, not to an installed package). **Peer mismatch = strict refuse-and-surface**: a plugin whose `peers`
   disagree with the shell's singleton majors does not load, and the shell names the
   disagreement — never warn-and-load. Final distribution (published URLs, pinning)
   stays deferred to the productization step (workbench.md §4).

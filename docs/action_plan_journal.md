@@ -28,6 +28,21 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — UI-23 DONE: the Workbench plugin compiles against the pin.** UI-22 pinned the
+  plugin contract this morning and said plainly what it had not done: `tsc` still followed a
+  `file:` link into the commons checkout, so the pin recorded what was verified without being
+  what was compiled. The owner asked for that gap closed. The plugin's tsconfig now maps
+  `locveil-workbench/contract` to the pinned `contract.ts`, and the `locveil-workbench`
+  dependency is gone altogether — it only ever supplied five type-only imports. One wrinkle
+  surfaced at intake: the pinned file imports React types and sits outside any `node_modules`,
+  so `react` is mapped to the plugin's own copy (the type-check fails without it — under the
+  link, that import had been resolving inside the commons package). The conformance test grew six configuration checks, each confirmed
+  to fail when its condition is broken, and the CI step that used to warn about pin-vs-link
+  drift now fails unless the compiler's file list shows the pinned contract and no commons file
+  outside the UI kit. The bundle is byte-identical. The commons checkout in the plugin job now
+  serves the UI kit only — a package the shell provides at runtime, with no pinned bytes to
+  compile from.
+
 - **2026-10-05 — OPS-43 DONE: the Workbench plugin's nine toolchain alerts closed.** The same
   recipe as the UI an hour earlier, on a smaller tree: postcss, js-yaml, brace-expansion,
   browserslist and its browser-data mapping, plus the codegen parser that pins js-yaml. npm

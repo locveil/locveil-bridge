@@ -47,9 +47,10 @@ path = "contracts/pins/docs-manifest-schema"
 conformance = "backend/tests/unit/test_docs_manifest.py"
 
 # UI-22 (HK-13): the Workbench plugin contract — contract types + the two machine
-# schemas. workbench-plugin/ compiles against the commons package through a file: link;
-# this pin is the versioned statement of what it was built against, and the
-# conformance test validates the plugin's emitted manifest against the pinned schema.
+# schemas. workbench-plugin/ type-checks against the pinned contract.ts (UI-23: a
+# tsconfig `paths` mapping; no locveil-workbench package is installed), and the
+# conformance test validates the plugin's emitted manifest against the pinned schema
+# and holds that mapping in place.
 [[family]]
 name = "workbench"
 owner_repo = "locveil-commons"

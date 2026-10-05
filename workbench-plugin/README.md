@@ -18,6 +18,17 @@ The bundle externalizes the shared runtime set (react, react-dom, react-router-d
 locveil-ui-kit) — the shell serves those through its import map. Everything else,
 including the generated API types and the RU/EN strings, is bundled.
 
+The plugin's contract with the shell — the `WorkbenchPlugin` and `PageProps` types
+imported from `locveil-workbench/contract` — is not an installed package.
+`tsconfig.json` maps that specifier to the copy this repo pins at
+[`../contracts/pins/workbench/contract.ts`](../contracts/pins/workbench/README.md), so
+the type-check always runs against the pinned version, whatever a commons checkout
+holds; the imports are type-only and leave nothing in the bundle. Keep them
+`import type`. `locveil-ui-kit` is different: a real package, linked from the sibling
+commons checkout (`../../locveil-commons/packages/ui-kit`, which must be built) for
+its types, its Tailwind preset and the class names inside its components — and left
+out of the bundle, because the shell serves the one shared copy.
+
 `dist/manifest.json` is not hand-written: the build merges
 [`manifest.fragment.json`](manifest.fragment.json) (id, entry, styles, and the peer
 majors the shell checks) with the `version` from `package.json`. Change the manifest by

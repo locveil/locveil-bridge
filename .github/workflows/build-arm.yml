@@ -75,11 +75,16 @@ jobs:
               # the docs manifest: validated against the schema under contracts/ by
               # test_docs_manifest, but it lives outside both trees above.
               - 'docs/manifest.json'
-              # the Workbench plugin's manifest source (UI-22): test_workbench_pin
-              # validates these against the pinned manifest-fragment schema.
+              # the Workbench plugin files test_workbench_pin reads: the manifest
+              # source it validates against the pinned manifest-fragment schema
+              # (UI-22), and the configuration + imports that keep the plugin
+              # compiling against the pinned contract.ts (UI-23).
               - 'workbench-plugin/manifest.fragment.json'
               - 'workbench-plugin/package.json'
+              - 'workbench-plugin/package-lock.json'
+              - 'workbench-plugin/tsconfig.json'
               - 'workbench-plugin/vite.config.ts'
+              - 'workbench-plugin/src/**'
               - '.github/workflows/build-arm.yml'
             ui:
               # ui/ plus the backend contract it consumes (openapi.json for codegen,
@@ -100,8 +105,8 @@ jobs:
               # does (gen:api-types), so a contract change re-validates it too.
               - 'workbench-plugin/**'
               - 'backend/openapi.json'
-              # the pinned plugin contract (UI-22): a re-pin re-runs the build and
-              # the pin-vs-live-link comparison below.
+              # the pinned plugin contract (UI-22): the plugin type-checks against
+              # these bytes (UI-23), so a re-pin re-runs the type-check and build.
               - 'contracts/pins/workbench/**'
               - '.github/workflows/build-arm.yml'
 
@@ -222,18 +227,23 @@ jobs:
 
   workbench-plugin-validate:
     # OPS-34 (PROD-26; HK-12 round-2 finding — the plugin had zero CI coverage).
-    # Typecheck + build. The plugin consumes the commons ui-kit and workbench
-    # packages as file: deps two levels up (`../../locveil-commons/packages/*`),
-    # so the job lays out bridge + commons as SIBLING checkouts inside the
-    # workspace and builds ui-kit first (its package exports point at an
-    # uncommitted dist/); the workbench package needs no build (its ./contract
-    # types resolve from src/). Commons rides its default branch here; what the
-    # plugin was VERIFIED against is the pin at contracts/pins/workbench/ (UI-22,
-    # family `workbench` in .repin.toml). Two closing steps tie build and pin
-    # together: the emitted manifest must equal the source the backend suite
-    # validated against the pinned schema, and a drift between the live-linked
-    # contract files and the pinned bytes is surfaced as a warning (staleness is
-    # repin's call, never this job's failure).
+    # Typecheck + build. Two commons surfaces, consumed two different ways:
+    # - the Workbench plugin CONTRACT (types + schemas) comes from the pin at
+    #   contracts/pins/workbench/ (UI-22, family `workbench` in .repin.toml) and
+    #   from nowhere else: tsconfig.json maps `locveil-workbench/contract` to the
+    #   pinned contract.ts and no `locveil-workbench` package is installed
+    #   (UI-23). A commons change to the contract reaches this job only through
+    #   a deliberate re-pin.
+    # - locveil-ui-kit is a package-style surface with no pinned bytes — the
+    #   shell's import-map singleton at runtime, a file: dep two levels up
+    #   (`../../locveil-commons/packages/ui-kit`) at build time. That is the one
+    #   reason this job lays out bridge + commons as SIBLING checkouts and builds
+    #   ui-kit first (its package exports point at an uncommitted dist/); commons
+    #   rides its default branch for it.
+    # Two closing steps tie build and pin together: the emitted manifest must
+    # equal the source the backend suite validated against the pinned schema,
+    # and the compiler's own file list must show the pinned contract.ts and
+    # nothing from the commons checkout but ui-kit.
     name: Workbench plugin validate (typecheck + build)
     runs-on: ubuntu-latest
     needs: changes
@@ -253,19 +263,11 @@ jobs:
           cache-dependency-path: |
             locveil-bridge/workbench-plugin/package-lock.json
             locveil-commons/packages/ui-kit/package-lock.json
-            locveil-commons/packages/workbench/package-lock.json
       - name: "Build ui-kit (the commons file: dep)"
         working-directory: locveil-commons/packages/ui-kit
         run: |
           npm ci
           npm run build
-      - name: Install workbench package deps
-        # No build — the plugin only consumes ./contract types from src/. But tsc
-        # follows the file: link into contract.ts, which imports React types, so
-        # the package needs its node_modules for type resolution (first live run
-        # caught this: resolvable on the dev box, absent in a bare checkout).
-        working-directory: locveil-commons/packages/workbench
-        run: npm ci
       - name: Install plugin dependencies
         working-directory: locveil-bridge/workbench-plugin
         run: npm ci
@@ -298,17 +300,28 @@ jobs:
               sys.exit(1)
           print("ok: emitted manifest is the validated source")
           PY
-      - name: "Pinned plugin contract vs the live-linked commons package (warn only)"
+      - name: "Contract types compile from the pinned file"
+        # The compiler's own answer to "which contract did this type-check read?".
+        # test_workbench_pin (backend suite) holds the configuration in place — the
+        # tsconfig mapping, no locveil-workbench dependency, type-only imports;
+        # this is the end-to-end proof on the real program: the pinned contract.ts
+        # is in it, and the commons checkout contributes ui-kit files only.
+        working-directory: locveil-bridge/workbench-plugin
         run: |
-          pin=locveil-bridge/contracts/pins/workbench
-          live=locveil-commons/packages/workbench
-          for pair in "contract.ts:src/contract.ts" \
-                      "manifest-fragment.schema.json:schemas/manifest-fragment.schema.json" \
-                      "runtime-config.schema.json:schemas/runtime-config.schema.json"; do
-            if ! cmp -s "$pin/${pair%%:*}" "$live/${pair#*:}"; then
-              echo "::warning::workbench contract drift - ${pair%%:*} on the commons default branch differs from the pinned bytes; this build compiled against the live copy. Re-pin deliberately (python3 scripts/repin.py workbench) once commons tags."
-            fi
-          done
+          npx tsc --listFilesOnly > "$RUNNER_TEMP/tsc-files.txt"
+          if ! grep -q '/locveil-bridge/contracts/pins/workbench/contract\.ts$' "$RUNNER_TEMP/tsc-files.txt"; then
+            echo "::error::tsc did not compile contracts/pins/workbench/contract.ts - the plugin contract must resolve to the pinned file (tsconfig.json paths)"
+            exit 1
+          fi
+          if grep '/locveil-commons/' "$RUNNER_TEMP/tsc-files.txt" | grep -v '/locveil-commons/packages/ui-kit/'; then
+            echo "::error::tsc compiled the commons files listed above - only packages/ui-kit may come from the sibling checkout; the plugin contract comes from contracts/pins/workbench/"
+            exit 1
+          fi
+          if grep '/node_modules/locveil-workbench/' "$RUNNER_TEMP/tsc-files.txt"; then
+            echo "::error::a locveil-workbench package is installed and compiled - the plugin contract comes from contracts/pins/workbench/ only"
+            exit 1
+          fi
+          echo "ok: the plugin contract compiles from contracts/pins/workbench/contract.ts"
 
   # ----------------------- gated ARM image builds (slow; manual workflow_dispatch) ---
   # Builds linux/arm/v7 images for backend + UI and PUSHES them to GHCR.

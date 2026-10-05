@@ -389,10 +389,59 @@ possible round-3.
   commons package through the `file:` link (in CI: commons' default branch), so the pinned
   `contract.ts` is the versioned statement of what was verified, not the bytes `tsc` reads —
   the warning step makes any gap visible; building from the pinned types is a separate decision.
+  _(Limit closed the same day by **UI-23** — the plugin now type-checks against the pinned file.)_
   Guard v4: 0 failures, 0 warnings; `repin --check --fail-on any` exits 0. Suite **773**,
   pyright 0; plugin typecheck + lint + build green.
   docs: contracts-registry
   contracts: workbench first consumed (pin @ v1.3.0).
+- [x] **UI-23** `[P1]` `[release]` — **DONE 2026-10-05** (filed the same day at the owner's
+  request; closes the limit UI-22 recorded). **The Workbench plugin type-checks against the
+  PINNED contract — `contracts/pins/workbench/contract.ts` is the file `tsc` reads, and the live
+  sibling link is gone.** **(a) Resolution:** `workbench-plugin/tsconfig.json` `paths` maps
+  `locveil-workbench/contract` → `../contracts/pins/workbench/contract.ts`. The pinned file
+  imports React types and has no `node_modules` in reach (the intake probe failed with TS2307
+  exactly there — under the link that import had resolved inside the commons package's own
+  `node_modules`), so a companion entry maps `react` → the plugin's own
+  `./node_modules/@types/react` — one React-types identity for the whole program as a side
+  effect. Import specifiers in the sources are unchanged.
+  **(b) Dependency removed:** the `file:` devDependency `locveil-workbench` is gone from
+  `package.json` and the lockfile (npm left the link target behind as an `extraneous` lock
+  entry; removed, and the lock is stable under `npm install` and `npm ci`). Nothing else used
+  the package: five imports, all `import type`, erased at build — no Vite, Tailwind or ESLint
+  reference. **(c) Guard, two sides.** Configuration side — `test_workbench_pin.py` +6 tests
+  (15, still hermetic): the mapping exists, has one target and it is the pinned file, with no
+  wildcard/sibling route and no `extends`; `react` maps into the plugin; `typecheck`/`build`
+  run plain `tsc` (the mapped config); no `locveil-workbench` dependency under any name in
+  `package.json`, the lock or the Vite config; every source mention of the package is
+  `import type … from 'locveil-workbench/contract'`; plus a self-test of the JSONC reader. Each
+  was mutation-checked (mapping removed / repointed at commons / wildcard route added,
+  dependency back in `package.json` / in the lock, value import, deep-path import, `react`
+  entry removed — eight mutations, eight failures). Compiler side — the plugin CI job's
+  warn-only "pinned vs live-linked" step (no subject any more) became the failing step
+  "Contract types compile from the pinned file": `tsc --listFilesOnly` must contain the pinned
+  `contract.ts`, and nothing from the commons checkout except `packages/ui-kit`. **(d) CI:** the
+  `npm ci` in the commons workbench package is dropped (it existed only so the linked
+  `contract.ts` could find React types) along with its cache key; `package-lock.json`,
+  `tsconfig.json` and `src/**` join the `backend` trigger so the hermetic guard runs when they
+  move; the built-manifest check is untouched. The commons checkout stays, now for
+  `locveil-ui-kit` ALONE — a package-style surface with no pinned bytes (the shell's import-map
+  singleton; at build time the plugin takes its component types, its Tailwind preset and the
+  class names scanned out of its `dist/`), deliberately left as it is. **(e) Texts that stated
+  the limit:** pin README (what the pin locks — now "by compilation"), `.repin.toml` family
+  comment, the CI job header, plugin README (where the contract types come from; what ui-kit
+  supplies), `workbench_split.md` consumption bullet, registry row wording, a one-line pointer
+  on the UI-22 entry. **Proof the pin is what compiles** (throwaway clone, a bare
+  checkout with nothing installed above it): mapping repointed at a scratch copy with
+  `PageProps.backends` renamed → `src/plugin.tsx(27,24): TS2339`; the clone's pin file itself
+  edited (`WorkbenchPlugin.pages` renamed) → `src/plugin.tsx(83,3): TS2353`, and contract-guard
+  reports HASH-MISMATCH on the same edit; both reverted → `tsc` clean. Before the change the
+  compiler's file list held `locveil-commons/packages/workbench/src/contract.ts`; after, the
+  pinned file and no commons file outside ui-kit. **Verified:** `npm ci`, `npm run check`,
+  `npm run build` green; `dist/` BYTE-IDENTICAL to the pre-change build (`index.js`, source
+  map, `style.css`, `manifest.json`); suite **779**, pyright 0; guard v4 0 failures, 0 warnings;
+  `repin --check --fail-on any` exits 0. Plugin version unchanged (0.1.1 — same bundle).
+  docs: contracts-registry
+  contracts: none — no surface moved; the workbench pin stays at v1.3.0, only its consumption changed (compiled from, not just stated).
 
 ## OPS — Docker / CI-CD / deploy / ops
 
