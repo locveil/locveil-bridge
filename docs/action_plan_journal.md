@@ -28,6 +28,15 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — OPS-41 DONE: the backend lock is clean again — five packages, nothing else.**
+  aiohttp, anyio, cryptography and urllib3 moved to their patched releases through one targeted
+  resolve. Two snags, both small: cryptography 50 needed pyOpenSSL 26.4.0 first (26.3.0 caps
+  it below 50), and an open-ended anyio upgrade split the lock in two by Python version, so it
+  was held at the first patched release instead. `pyproject.toml` did not change. The catalog
+  golden and the OpenAPI schema regenerate byte-identical. Worth knowing for the next image:
+  the backend Dockerfile resolves from the declared ranges, not from the lock, so a rebuild
+  picks these up regardless.
+
 - **2026-10-05 — Dependabot intake: OPS-41 / OPS-42 / OPS-43 filed.** 54 open alerts, read
   against the three lockfiles: 9 on the backend (aiohttp, anyio — one critical —, cryptography,
   urllib3), 36 on `ui/` (axios ×12 and react-router-dom in the runtime bundle; the rest is the

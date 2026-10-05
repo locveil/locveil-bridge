@@ -729,6 +729,35 @@ possible round-3.
   docs: none — pinned process block + enforcement tooling; no manifest node describes it.
   contracts: scope-guard consumed-tool pin bumped v7.3.0 → v7.3.1 (script bytes identical; the
   contract-triad block text moved).
+- [x] **OPS-41** `[P1]` `[release]` — **DONE 2026-10-05** (filed + executed same day at the
+  Dependabot intake, owner request; siblings OPS-42 / OPS-43). **Backend lockfile security
+  refresh — the 9 open Dependabot alerts on `backend/uv.lock`.** Intake matched the lock
+  exactly (classification: valid). One targeted resolve, `uv lock --upgrade-package` for the
+  named packages only — no blanket `--upgrade`, `pyproject.toml` untouched (every patched
+  version was already inside its declared range): `aiohttp` 3.14.1 → **3.14.3**
+  (GHSA-cq5v-8q36-5273 high, GHSA-mfx4-hv73-q22v, GHSA-mq44-7p77-q5h7), `anyio` 4.13.0 →
+  **4.14.2** (GHSA-82r6-8w77-94w6 critical, GHSA-5p39-cfhj-2xmp), `cryptography` 49.0.0 →
+  **50.0.2** (GHSA-g6cj-pr64-35w5 high), `urllib3` 2.7.0 → **2.8.0** (GHSA-vxq7-64xx-v4gw,
+  GHSA-8988-9cw3-xx77, GHSA-gh4c-6fx4-qh6g). **Two things the first resolve taught:** (1)
+  `cryptography` would not move on its own — `pyOpenSSL` 26.3.0 declares `cryptography<50`;
+  26.4.0 lifts that to `<51`, so `pyopenssl` 26.3.0 → **26.4.0** rides along as the one
+  enabling bump (inside the existing `<27` cap). (2) An unconstrained `anyio` upgrade FORKED
+  the lock (4.14.2 below Python 3.15, 4.15.1 above) because 4.15 wants a newer
+  `typing-extensions` than the locked one; the upgrade was pinned to the first patched release
+  (`--upgrade-package anyio==4.14.2`) — one version, no fork, no unrelated `typing-extensions`
+  move. Net lock diff: exactly these five packages. The two compiled ones (`aiohttp`,
+  `cryptography`) still ship cp311 `manylinux_2_31_armv7l` wheels — checked in the lock; the
+  other three are pure Python — so the WB7 image needs no source compile. **Guard rail held:**
+  golden catalog and OpenAPI schema regenerated to a scratch path — byte-identical to
+  `contracts/catalog/` and `backend/openapi.json`. **Verification:** suite **773**, pyright 0,
+  import-linter 6/6, no-TYPE_CHECKING clean; contract-guard 0/0; `repin --check --fail-on any`
+  exits 0. **Noted, not changed:** `docker/Dockerfile.backend` installs with
+  `uv pip install .` — the image resolves from the `pyproject.toml` ranges at build time and
+  does not read `uv.lock`, so the lock is the dev/CI pin-of-record and the next image build
+  picks the patched releases up on its own.
+  docs: none — lockfile-only refresh; no manifest node describes locked versions.
+  contracts: none — dependency versions only; catalog golden + OpenAPI regenerated
+  byte-identical, no pin or vendored tool touched.
 
 ## CORE — Backend core / architecture
 

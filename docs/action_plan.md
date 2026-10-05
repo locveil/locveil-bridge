@@ -850,20 +850,6 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
-- [ ] **OPS-41** `[P1]` `[release]` — **Backend lockfile security refresh — the four packages
-  behind the 9 open Dependabot alerts on `backend/uv.lock`** (filed 2026-10-05 at the Dependabot
-  intake, owner request: 54 open alerts across three manifests; siblings OPS-42 / OPS-43).
-  Reconciled against the lock: `aiohttp` 3.14.1 (needs ≥ 3.14.3; runtime direct, 1 high + 2
-  medium), `anyio` 4.13.0 (≥ 4.14.2; transitive, 1 critical + 1 medium), `cryptography` 49.0.0
-  (≥ 50.0.0; transitive via pyOpenSSL/pyatv, high), `urllib3` 2.7.0 (≥ 2.8.0; transitive via
-  requests, 2 high + 1 medium). **Scope:** targeted `uv lock --upgrade-package <name>` for
-  exactly these four — no blanket `--upgrade`; widen a `pyproject.toml` range only if the
-  resolver cannot otherwise admit a patched version (`pyOpenSSL<27` vs cryptography 50 is the
-  one to watch). **Guard rail:** the byte-locked catalog artifacts (`contracts/catalog/`
-  golden + openapi) must not move — regenerate and diff; a moved byte stops the upgrade (it
-  would be a contract cut). **DoD:** suite + pyright 0 + import-linter green, contract-guard +
-  `repin --check --fail-on any` clean, the 9 alerts closed on the post-push scan.
-
 - [ ] **OPS-42** `[P1]` `[release]` — **`ui/` lockfile security refresh — the 36 open Dependabot
   alerts on `ui/package-lock.json`** (filed 2026-10-05, same intake as OPS-41). Reconciled
   against the lock: **runtime** — `axios` 1.18.0 (needs ≥ 1.20.0; 12 alerts, 7 high),
