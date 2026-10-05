@@ -662,7 +662,8 @@ endpoint).
   reconciles that wording against the convention before building. **Activates alongside DRV-37**
   (the implementation — DRV-36 was design-only; the consuming constants land in DRV-37), i.e. at the
   satellite's first conforming descriptor (the PROD-20 chain). *(Dep line re-anchored 2026-07-14,
-  DOC-16.)*
+  DOC-16.)* **Redefinition OWNER-CONFIRMED 2026-10-05** ("VWB-39 redefinition is fine,
+  confirmed" — relayed by the PROD-28 coordinator; the scope above stands as reconciled).
 
 ### UI — config-ui
 
