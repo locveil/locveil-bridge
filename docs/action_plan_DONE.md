@@ -362,6 +362,37 @@ possible round-3.
   `backends.api = http://192.168.1.50:8000` (the owner-configured WB7 origin). docs: none — same
   scope as UI-18 (dev-phase workstation tool; package README is the consumer doc, updated in
   place).
+- [x] **UI-22** `[P1]` `[release]` — **DONE 2026-10-05** (filed at the PROD-28 sweep intake by
+  the coordinator, executed same day after OPS-39; council **HK-13**; lead VWB-44). **The
+  `workbench` family is pinned (`workbench-v1.3.0`) and the plugin's emitted manifest is locked
+  to the pinned schema — the plugin contract is no longer consumed with no pin at all.**
+  **(a) Pin:** family declared in `.repin.toml` (its header had promised this since OPS-33),
+  pinned with the vendored repin v2 → `contracts/pins/workbench/`: `contract.ts` +
+  `manifest-fragment.schema.json` + `runtime-config.schema.json` + owner STAMP verbatim + strict
+  PIN.json. **(b) The manifest source became data** (the intake finding): the fragment was an
+  object literal inside a Vite plugin, unreadable without running the build — its static part
+  (id, entry, styles, peers) moved to `workbench-plugin/manifest.fragment.json`, and
+  `vite.config.ts` is now a pure merge of that file with `package.json`'s version. Rebuilt:
+  `dist/manifest.json` BYTE-IDENTICAL to the previous build. **(c) Conformance test**
+  `backend/tests/unit/test_workbench_pin.py` (9 tests, hermetic — no Node, no `dist/`, no sibling
+  checkout): the merge validates against the pinned manifest-fragment schema; the schema is not
+  vacuous (rejects a missing required field and a non-string peer); `version` has one source;
+  the Vite config carries no inline fragment; peers equal the singleton packages the bundle
+  leaves external; entry/styles match the configured lib file names; the pin holds exactly the
+  owner-enumerated set; the pinned schema is field-identical to the pinned `ManifestFragment`
+  type. **(d) CI:** the three manifest-source files join the `backend` trigger; the plugin job
+  re-runs on a pin move and gains two steps after the build — the emitted manifest must EQUAL
+  the validated merge (fails), and a difference between the live-linked commons contract files
+  and the pinned bytes is surfaced as a WARNING (staleness stays repin's call). **(e)** Registry
+  row; pin README (what the pin locks and what it only states); plugin README explains where
+  the manifest comes from. **Honest limit, recorded:** the plugin still COMPILES against the
+  commons package through the `file:` link (in CI: commons' default branch), so the pinned
+  `contract.ts` is the versioned statement of what was verified, not the bytes `tsc` reads —
+  the warning step makes any gap visible; building from the pinned types is a separate decision.
+  Guard v4: 0 failures, 0 warnings; `repin --check --fail-on any` exits 0. Suite **773**,
+  pyright 0; plugin typecheck + lint + build green.
+  docs: contracts-registry
+  contracts: workbench first consumed (pin @ v1.3.0).
 
 ## OPS — Docker / CI-CD / deploy / ops
 

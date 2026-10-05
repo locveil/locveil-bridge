@@ -28,6 +28,17 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — UI-22 DONE: the Workbench plugin contract is pinned and tested.** The plugin
+  had been building against the commons contract through a bare `file:` link since UI-18 —
+  consumed, never pinned. Commons shipped the machine schemas today (`workbench-v1.3.0`), so
+  the family joined `.repin.toml` and landed at `contracts/pins/workbench/`. To test the
+  emitted manifest without running a Node build inside the backend job, the manifest's static
+  part moved out of the Vite config into `manifest.fragment.json`; the build is now a pure
+  merge, the backend suite validates that merge against the pinned schema, and the plugin's CI
+  job proves the built file equals it. The remaining gap is stated rather than hidden: `tsc`
+  still reads the live-linked `contract.ts`, so CI warns when it differs from the pinned bytes.
+  With this the sweep is complete — four pins, three tools, guard and repin both clean.
+
 - **2026-10-05 — DOC-19 DONE: the docs manifest stops being a contract; its schema becomes a
   pin.** HK-13 reversed half of HK-6: a per-repo manifest is instance data, and the thing three
   repos were consuming three different ways — the schema — is now a commons-owned family. The

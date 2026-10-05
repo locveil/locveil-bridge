@@ -1,0 +1,16 @@
+{
+  "contract": "workbench",
+  "version": "1.3.0",
+  "tag": "workbench-v1.3.0",
+  "owner_repo": "locveil-commons",
+  "owner_commit": "3e2c8f22fdbd65521c79e82e80d855a4362b7277",
+  "pinned_by": "locveil-bridge scripts/repin.py (OPS-33)",
+  "pin_date": "2026-10-05",
+  "files": {
+    "contract.ts": "c7faf54f1387c5da0e79789de0ccae282f6a5d7df2c8be165247e6a1a70e520c",
+    "manifest-fragment.schema.json": "1c72f2021ad34189fc23447b092a47bedf4e03ade7c74e72b52c6b6880cddb68",
+    "runtime-config.schema.json": "27dd54e24ac2e3c7f9c7c501fef155179e64cc5c7219a5c5ce2ed713eef73c08",
+    "STAMP.json": "6c37faea986af475efd0791e66bae97e878e47bf299d4f05f0659503647767bf"
+  },
+  "conformance": "backend/tests/unit/test_workbench_pin.py"
+}

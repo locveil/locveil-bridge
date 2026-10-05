@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://locveil.dev/contracts/workbench/manifest-fragment.schema.json",
+  "title": "Workbench manifest fragment",
+  "description": "The build-emitted `manifest.json` a plugin's OWNING repo writes into its dist/ (HK-11). Machine form of `ManifestFragment` in packages/workbench/src/contract.ts — the two are kept field-identical by the owner guard. Unknown extra keys are tolerated (additive minors).",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "entry",
+    "peers"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Plugin id; also the route segment under /p/<id>/."
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ESM entry, relative to the fragment. Default export: WorkbenchPlugin."
+    },
+    "styles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Stylesheets the shell injects/removes, relative to the fragment."
+    },
+    "peers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Strict-major match against the shell singletons (react, react-dom, react-router-dom, locveil-ui-kit); a mismatch is refuse-and-surface. Non-singleton peers are the plugin's own business."
+    },
+    "backendCompat": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Optional per-plugin backend compatibility statement (informational in v1)."
+    }
+  }
+}

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import { writeFile } from 'node:fs/promises'
 import pkg from './package.json' with { type: 'json' }
+import fragmentSource from './manifest.fragment.json' with { type: 'json' }
 
 /* UI-18: the Bridge Workbench plugin (HK-11 runtime assembly) — an ESM library with
    the frozen singleton set external (the shell serves those via its import map) plus
@@ -18,25 +19,19 @@ const SINGLETONS = [
   'locveil-ui-kit',
 ]
 
-/** Peer majors the shell refuses-and-surfaces on (contract: ManifestFragment.peers). */
-const PEERS = {
-  react: '^18',
-  'react-dom': '^18',
-  'react-router-dom': '^6',
-  'locveil-ui-kit': '^0.1',
-}
-
+/* The manifest fragment's static part lives in manifest.fragment.json — id, entry,
+   styles, and the peer majors the shell refuses-and-surfaces on (contract:
+   ManifestFragment.peers). It is DATA on purpose: the backend test suite validates
+   that file + package.json's version against the pinned Workbench manifest-fragment
+   schema (contracts/pins/workbench/) without running this build. Keep this function
+   a pure merge — anything added to the emitted manifest goes into the JSON file, and
+   `entry` / `styles` there must match the lib file names configured below. */
 function emitManifestFragment(): Plugin {
   return {
     name: 'bridge-manifest-fragment',
     async writeBundle() {
-      const fragment = {
-        id: 'bridge',
-        version: pkg.version,
-        entry: './index.js',
-        styles: ['./style.css'],
-        peers: PEERS,
-      }
+      const { id, ...rest } = fragmentSource
+      const fragment = { id, version: pkg.version, ...rest }
       await writeFile(
         path.resolve(__dirname, 'dist/manifest.json'),
         JSON.stringify(fragment, null, 2) + '\n'

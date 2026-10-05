@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://locveil.dev/contracts/workbench/runtime-config.schema.json",
+  "title": "Workbench runtime config",
+  "description": "`/runtime-config.json` — what the shell loader reads at start (HK-11 runtime assembly). Generated from the owner-edited shell config; never build-emitted by a plugin. An entry is either an ACTIVE plugin (a `url` to its dist, plus deployment-fact backends) or a DORMANT slot (a gate and no url: zero activity).",
+  "type": "object",
+  "required": [
+    "plugins"
+  ],
+  "properties": {
+    "plugins": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "title": "active",
+            "type": "object",
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Base URL of the plugin dist; the loader fetches `manifest.json` under it."
+              },
+              "backends": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "ABSOLUTE backend origins (IP and port) — deployment facts delivered to pages as PageProps.backends; convention key: `api`."
+              }
+            },
+            "not": {
+              "required": [
+                "gate"
+              ]
+            }
+          },
+          {
+            "title": "dormant",
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "gate"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "description": "RU-first product: a plain string serves both locales; an object is per-locale.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "ru",
+                      "en"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "ru": {
+                        "type": "string"
+                      },
+                      "en": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              },
+              "gate": {
+                "type": "object",
+                "required": [
+                  "all"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "all": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Conjunction of gate references — ALL must hold before the slot activates."
+                  }
+                }
+              }
+            },
+            "not": {
+              "required": [
+                "url"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

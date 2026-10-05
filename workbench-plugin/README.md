@@ -18,6 +18,14 @@ The bundle externalizes the shared runtime set (react, react-dom, react-router-d
 locveil-ui-kit) — the shell serves those through its import map. Everything else,
 including the generated API types and the RU/EN strings, is bundled.
 
+`dist/manifest.json` is not hand-written: the build merges
+[`manifest.fragment.json`](manifest.fragment.json) (id, entry, styles, and the peer
+majors the shell checks) with the `version` from `package.json`. Change the manifest by
+editing that file. Its shape is held to the Workbench plugin contract this repo pins
+at [`../contracts/pins/workbench/`](../contracts/pins/workbench/README.md) — the
+backend test suite validates the merge against the pinned schema, and the build check
+in CI confirms the emitted file is that same merge.
+
 ## Run it in the shell
 
 From `../../locveil-commons/packages/workbench`: add this package's `dist/` path to

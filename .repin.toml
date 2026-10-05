@@ -46,6 +46,19 @@ owner_url = "https://github.com/locveil/locveil-commons.git"
 path = "contracts/pins/docs-manifest-schema"
 conformance = "backend/tests/unit/test_docs_manifest.py"
 
+# UI-22 (HK-13): the Workbench plugin contract — contract types + the two machine
+# schemas. workbench-plugin/ compiles against the commons package through a file: link;
+# this pin is the versioned statement of what it was built against, and the
+# conformance test validates the plugin's emitted manifest against the pinned schema.
+[[family]]
+name = "workbench"
+owner_repo = "locveil-commons"
+owner_dir = "../locveil-commons"
+owner_url = "https://github.com/locveil/locveil-commons.git"
+[[family.dest]]
+path = "contracts/pins/workbench"
+conformance = "backend/tests/unit/test_workbench_pin.py"
+
 # Vendored-tools manifest: path + pinned_tag + sha256 are written by
 # `python3 scripts/repin.py tool <name>` — never by hand. The tag is checked against
 # the owner's newest; the sha256 proves the vendored copy is unedited (a mismatch

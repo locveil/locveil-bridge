@@ -791,23 +791,6 @@ endpoint).
   workbench identity for contrast), `remote.png`. `config-ui-stays-functional` gates apply to
   every implementation follow-up.
 
-- [ ] **UI-22** `[P1]` `[release]` — **Pin the `workbench` family; lock the plugin's emitted
-  manifest to the pinned schema** (board **PROD-28** sweep, coordinator filing 2026-10-05 after
-  commons cut `workbench-v1.3.0`; council **HK-13**; lead VWB-44). The Workbench plugin
-  (`workbench-plugin/`) builds against the commons plugin contract through a live `file:` link
-  with no pin at all — the `.repin.toml` header has said since OPS-33 that the family joins "when
-  commons ships the machine schemas"; `workbench-v1.3.0` is that cut (enumerated: `contract.ts`
-  + `manifest-fragment.schema.json` + `runtime-config.schema.json`). **Scope:** declare the
-  family in `.repin.toml` and pin it with the vendored repin v2 to `contracts/pins/workbench/`;
-  a named conformance test proving the manifest fragment the plugin build emits validates against
-  the pinned `manifest-fragment.schema.json` — HERMETIC: it tests the SOURCE of the emitted
-  manifest, not a built `dist/` (the backend job builds no plugin); registry row;
-  CI trigger so the test runs when the manifest source moves. **Intake reconciliation: valid,
-  one finding** — the fragment is assembled inline inside a Vite plugin in
-  `workbench-plugin/vite.config.ts`, unreadable without running the build; the hermetic test
-  needs the static part extracted to a committed data file the build and the test both read.
-  Runs after OPS-39 (needs repin v2). First consumption of the surface.
-
 ### OPS — Docker / CI-CD / deploy / ops
 
 - [ ] **OPS-11** `[P2]` `[deferred]` — **Multi-arch images: add `linux/arm64` (aarch64, next-gen Wirenboard) alongside `linux/arm/v7`.** Filed 2026-07-02 off a chat analysis (sister-repo prompt: `locveil-voice` builds armv7 + aarch64 + standalone). **Unlike the voice repo** (per-target Dockerfiles + arch-suffixed image names, forced by per-platform ML profiles), the bridge's images are identical on both arches → use buildx **multi-platform manifests**: `platforms: linux/arm/v7,linux/arm64` in both image jobs of `.github/workflows/build-arm.yml` yields ONE manifest list per existing tag — WB7 pulls armv7, WB8 pulls arm64 from the same `ghcr.io/...:latest`; `ops/` (compose / `update.sh` / INSTALL.md flow) unchanged. **Work items:** (1) workflow: extend `platforms`, **drop the `ARCH=arm32v7` build-arg** — the Dockerfile's `${ARCH:+$ARCH/}python` prefix predates platform-aware buildx and would force the arm32 base into the arm64 leg (Dockerfile itself needs no change; `ARG ARCH=` defaults empty); (2) `ui/Dockerfile`: stage 1 → `FROM --platform=$BUILDPLATFORM node:20 AS builder` — the `dist/` bundle is arch-independent, so the ~14-min QEMU node build runs natively on the amd64 runner once and only the small nginx stage builds per-arch (bonus: the *existing* armv7 UI build should drop to ~2-3 min); (3) docs: a sentence each in `ops/INSTALL.md` + the READMEs noting the images are multi-arch. **Notes:** piwheels extra-index is armv7-only but harmless on arm64 (PyPI aarch64 cp311 wheel coverage is good — likely a faster leg than armv7); that `/etc/pip/pip.conf` is probably vestigial anyway since the image installs via `uv`, which doesn't read pip config — verify/drop while in there. WB8's Cortex-A5x could in principle run the armv7 image via AArch32 compat, but native arm64 is the clean path at ~6 lines of diff. **Verification:** QEMU build smoke in CI; real run gated on actual WB8 hardware (hence `[later]`).

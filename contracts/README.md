@@ -25,6 +25,7 @@ vendored `scripts/scope_guard.py`, enforced by the sha256 block rules in
 |---|---|---|
 | [`report-protocol`](pins/report-protocol/README.md) — the problem-report filing surface (labels, title prefix, report-id/bundle shape) | locveil-commons (tag `report-protocol-v1.0.1`) | `backend/tests/unit/test_report_protocol_pin.py` |
 | [`docs-manifest-schema`](pins/docs-manifest-schema/README.md) — the org-wide schema this repo's docs manifest (`docs/manifest.json`, instance data) validates against | locveil-commons (tag `docs-manifest-schema-v1.0.0`) | `backend/tests/unit/test_docs_manifest.py` |
+| [`workbench`](pins/workbench/README.md) — the Workbench plugin contract (contract types + manifest-fragment and runtime-config schemas) the Workbench plugin in `workbench-plugin/` is built for | locveil-commons (tag `workbench-v1.3.0`) | `backend/tests/unit/test_workbench_pin.py` |
 | [`core-py`](pins/core-py/README.md) — the shared entry-point-group discovery engine (`DynamicLoader`), vendored as runtime code: the pinned artifact plus a byte-identical importable copy in `backend/` | locveil-commons (tag `core-py-v1.1`) | `backend/tests/unit/test_core_py_pin_identity.py` |
 
 Layer-1 coherence (layout, stamps, pin hashes) is checked by the vendored

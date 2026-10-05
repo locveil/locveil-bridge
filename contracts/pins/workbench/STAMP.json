@@ -1,0 +1,16 @@
+{
+  "contract": "workbench",
+  "version": "1.3.0",
+  "tag": "workbench-v1.3.0",
+  "date": "2026-10-05",
+  "owner_repo": "locveil-commons",
+  "artifacts": [
+    "packages/workbench/src/contract.ts",
+    "packages/workbench/schemas/manifest-fragment.schema.json",
+    "packages/workbench/schemas/runtime-config.schema.json"
+  ],
+  "guard": "eval/tests/test_workbench_schemas.py",
+  "design": "docs/design/workbench.md",
+  "distribution": "locveil-workbench (shell package; the PLUGIN CONTRACT is the consumed surface)",
+  "note": "v1.3.0 = the machine half of the plugin contract (IMPL-15; owed since HK-12/PROD-26, executed under HK-13/PROD-28): the manifest-fragment and runtime-config JSON Schemas join the contract-as-code types as ENUMERATED artifacts — these three files are the consumed surface and are byte-locked to the tag; the shell around them (chrome, loader, build scripts) keeps advancing between tags. Minor: the surface gains files, nothing a plugin builds against changed (contract.ts is byte-identical to workbench-v1.2). The tag carries its STAMP for the first time. Semantics that a schema cannot say (import-map singleton set, strict-major refuse-and-surface, dormant = zero activity) stay normative prose: docs/design/workbench.md §4 + the package README."
+}

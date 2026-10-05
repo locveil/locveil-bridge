@@ -1,0 +1,11 @@
+{
+  "id": "bridge",
+  "entry": "./index.js",
+  "styles": ["./style.css"],
+  "peers": {
+    "react": "^18",
+    "react-dom": "^18",
+    "react-router-dom": "^6",
+    "locveil-ui-kit": "^0.1"
+  }
+}

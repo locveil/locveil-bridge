@@ -75,6 +75,11 @@ jobs:
               # the docs manifest: validated against the schema under contracts/ by
               # test_docs_manifest, but it lives outside both trees above.
               - 'docs/manifest.json'
+              # the Workbench plugin's manifest source (UI-22): test_workbench_pin
+              # validates these against the pinned manifest-fragment schema.
+              - 'workbench-plugin/manifest.fragment.json'
+              - 'workbench-plugin/package.json'
+              - 'workbench-plugin/vite.config.ts'
               - '.github/workflows/build-arm.yml'
             ui:
               # ui/ plus the backend contract it consumes (openapi.json for codegen,
@@ -95,6 +100,9 @@ jobs:
               # does (gen:api-types), so a contract change re-validates it too.
               - 'workbench-plugin/**'
               - 'backend/openapi.json'
+              # the pinned plugin contract (UI-22): a re-pin re-runs the build and
+              # the pin-vs-live-link comparison below.
+              - 'contracts/pins/workbench/**'
               - '.github/workflows/build-arm.yml'
 
   # ------------------------------- fast checks (gated, except contract-guard) ---
@@ -219,9 +227,13 @@ jobs:
     # so the job lays out bridge + commons as SIBLING checkouts inside the
     # workspace and builds ui-kit first (its package exports point at an
     # uncommitted dist/); the workbench package needs no build (its ./contract
-    # types resolve from src/). Commons rides its default branch here — the
-    # workbench contract pin (.repin.toml family) arrives when commons ships
-    # the machine schemas at the next workbench bump.
+    # types resolve from src/). Commons rides its default branch here; what the
+    # plugin was VERIFIED against is the pin at contracts/pins/workbench/ (UI-22,
+    # family `workbench` in .repin.toml). Two closing steps tie build and pin
+    # together: the emitted manifest must equal the source the backend suite
+    # validated against the pinned schema, and a drift between the live-linked
+    # contract files and the pinned bytes is surfaced as a warning (staleness is
+    # repin's call, never this job's failure).
     name: Workbench plugin validate (typecheck + build)
     runs-on: ubuntu-latest
     needs: changes
@@ -266,6 +278,37 @@ jobs:
       - name: Build
         working-directory: locveil-bridge/workbench-plugin
         run: npm run build
+      - name: "Emitted manifest equals its validated source"
+        # test_workbench_pin (backend suite) validates manifest.fragment.json +
+        # package.json's version against the pinned schema; this proves the build
+        # emitted exactly that merge.
+        working-directory: locveil-bridge/workbench-plugin
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          source = json.load(open("manifest.fragment.json"))
+          version = json.load(open("package.json"))["version"]
+          expected = {"id": source["id"], "version": version,
+                      **{k: v for k, v in source.items() if k != "id"}}
+          emitted = json.load(open("dist/manifest.json"))
+          if emitted != expected:
+              print("dist/manifest.json differs from manifest.fragment.json + package.json version")
+              print("emitted: ", json.dumps(emitted, sort_keys=True))
+              print("expected:", json.dumps(expected, sort_keys=True))
+              sys.exit(1)
+          print("ok: emitted manifest is the validated source")
+          PY
+      - name: "Pinned plugin contract vs the live-linked commons package (warn only)"
+        run: |
+          pin=locveil-bridge/contracts/pins/workbench
+          live=locveil-commons/packages/workbench
+          for pair in "contract.ts:src/contract.ts" \
+                      "manifest-fragment.schema.json:schemas/manifest-fragment.schema.json" \
+                      "runtime-config.schema.json:schemas/runtime-config.schema.json"; do
+            if ! cmp -s "$pin/${pair%%:*}" "$live/${pair#*:}"; then
+              echo "::warning::workbench contract drift - ${pair%%:*} on the commons default branch differs from the pinned bytes; this build compiled against the live copy. Re-pin deliberately (python3 scripts/repin.py workbench) once commons tags."
+            fi
+          done
 
   # ----------------------- gated ARM image builds (slow; manual workflow_dispatch) ---
   # Builds linux/arm/v7 images for backend + UI and PUSHES them to GHCR.
