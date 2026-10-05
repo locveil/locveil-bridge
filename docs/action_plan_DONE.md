@@ -758,6 +758,52 @@ possible round-3.
   docs: none — lockfile-only refresh; no manifest node describes locked versions.
   contracts: none — dependency versions only; catalog golden + OpenAPI regenerated
   byte-identical, no pin or vendored tool touched.
+- [x] **OPS-42** `[P1]` `[release]` — **DONE 2026-10-05** (filed + executed same day at the
+  Dependabot intake, owner request; siblings OPS-41 / OPS-43). **`ui/` lockfile security
+  refresh — 34 of the 36 open Dependabot alerts on `ui/package-lock.json`; the react-router
+  pair stays open on purpose.** Intake matched the lock (classification: valid). Targeted
+  `npm update <pkg>` for the alerted packages only — no `--force`, **no `overrides` needed**.
+  **Runtime (ships in the bundle):** `axios` 1.18.0 → **1.20.0** (12 alerts, 7 high; floor
+  `^1.16.0` → `^1.20.0`), `react-router-dom` 6.30.4 → **6.30.6** (GHSA-jjmj-jmhj-qwj2; floor
+  `^6.30.4` → `^6.30.6`; `react-router` 6.30.6 and `@remix-run/router` 1.23.4 ride as its
+  exact-pinned deps). **Dev toolchain (never in the nginx image):** `postcss` 8.5.15 →
+  **8.5.29** (floor `^8.5.10` → `^8.5.23`; its deps `nanoid` 3.3.12 → 3.3.20 and
+  `source-map-js` 1.2.1 → 1.2.2 ride), `brace-expansion` 1.1.15/1.1.16 → **1.1.21**, 2.1.1 →
+  **2.1.7**, 5.0.7 → **5.0.12** (every nested copy), `browserslist` 4.25.0 → **4.29.3** (with
+  its data closure: `caniuse-lite`, `electron-to-chromium`, `node-releases`,
+  `update-browserslist-db`, and `baseline-browser-mapping` 2.11.27 as a new dep), `fast-uri`
+  3.1.2 → **3.1.8**, `js-yaml` 3.15.0 → **3.15.2** and 4.2.0/4.3.0 → **4.3.2** (deduped to one
+  4.x copy), `postcss-selector-parser` 6.1.2 → **6.1.4**. **One enabling bump:**
+  `@redocly/openapi-core` 1.34.16 → **1.34.20** — it pins `js-yaml` EXACTLY (4.2.0), so the 4.x
+  alerts could not close in-range without it; it sits inside `openapi-typescript`'s `^1.34.6`.
+  The codegen was the risk surface: `npm run gen:api-types` output is **byte-identical**
+  before and after. The three floor raises are the only `package.json` edits (a fresh resolve
+  can no longer land on a vulnerable release of a direct dep). **Left OPEN, not dismissed —
+  `react-router` GHSA-wrjc-x8rr-h8h6 + GHSA-337j-9hxr-rhxg:** both are patched only in 7.18.0,
+  and the Workbench plugin contract freezes the `react-router-dom` singleton at major 6
+  (`workbench-plugin/manifest.fragment.json`), so a v7 move is a cross-repo contract major,
+  not a dependency bump. Reachability in this UI, read from the code: **(1) SSR-hydration
+  `deserializeErrors` (GHSA-337j) — not reachable.** The app is client-rendered and mounts the
+  declarative `<BrowserRouter>` (`ui/src/app/main.tsx`); the vulnerable function runs only when
+  a data router (`createBrowserRouter`) reads `window.__staticRouterHydrationData` from a
+  server-rendered page. Neither exists here, and the built bundle does not contain the
+  hydration symbol at all (tree-shaken — checked in `dist/`). **(2) Open redirect via
+  attacker-supplied navigation targets (GHSA-wrjc) — not reachable.** The UI has no `<Link>`,
+  `<Navigate>` or `redirect`; the only navigation calls are the three in
+  `ui/src/components/Navbar.tsx`, each a literal-prefixed template (`/devices/${id}`,
+  `/scenario/${id}`) whose id comes from the bridge's own device/scenario lists — never from
+  the URL, a query parameter or user-typed text — so a target can never begin with the
+  backslash/double-slash form the advisory needs. Revisit when the Workbench contract moves
+  its router major. **Also seen, not an alert:** `npm audit` additionally flags `braces`
+  ≤ 3.0.3 (GHSA-vfj7-8cjw-p6xm) through the jest 29 / tailwind 3 chains — no patched `braces`
+  release exists (3.0.3 is the newest), dev-only; nothing to bump. **Verification:** clean
+  `npm ci`, `npm run check` (typecheck + ESLint + orphans) and `npm run build` green
+  (`config-ui-stays-functional`); `npm audit` roots = the react-router pair + `braces` only.
+  Backend untouched.
+  docs: none — dependency versions only; no manifest node names them (ui-readme's stack line
+  carries majors, none moved).
+  contracts: none — no contract artifact, pin or vendored tool touched; generated API types
+  byte-identical.
 
 ## CORE — Backend core / architecture
 

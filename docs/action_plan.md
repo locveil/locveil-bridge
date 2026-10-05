@@ -850,23 +850,6 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
-- [ ] **OPS-42** `[P1]` `[release]` — **`ui/` lockfile security refresh — the 36 open Dependabot
-  alerts on `ui/package-lock.json`** (filed 2026-10-05, same intake as OPS-41). Reconciled
-  against the lock: **runtime** — `axios` 1.18.0 (needs ≥ 1.20.0; 12 alerts, 7 high),
-  `react-router-dom` 6.30.4 (≥ 6.30.6, GHSA-jjmj-jmhj-qwj2); **dev-only toolchain** —
-  `postcss` 8.5.15 (≥ 8.5.23), `brace-expansion` (1.x ≥ 1.1.21, 2.x ≥ 2.1.7, 5.x ≥ 5.0.12),
-  `browserslist` 4.25.0 (≥ 4.28.7), `fast-uri` 3.1.2 (≥ 3.1.7), `js-yaml` (3.x ≥ 3.15.2,
-  4.x ≥ 4.3.2), `postcss-selector-parser` 6.1.2 (≥ 6.1.3). **Scope:** `npm update <pkg>` /
-  `npm audit fix` without `--force`; an `overrides` entry only where a transitive cannot reach
-  its patched version in-range; raise the `axios` / `react-router-dom` / `postcss` floors in
-  `package.json` to the first patched version so a fresh resolve cannot regress. **Deliberately
-  NOT in scope:** the two `react-router` alerts patched only in 7.18.0 (GHSA-wrjc-x8rr-h8h6,
-  GHSA-337j-9hxr-rhxg) — the Workbench plugin contract freezes the `react-router-dom` singleton
-  at major 6, so a v7 move is a cross-repo contract major, not a dependency bump; they stay
-  OPEN (not dismissed) with a reachability note recorded at completion. **DoD:**
-  `npm run check && npm run build` (`config-ui-stays-functional`), `npm audit` showing only
-  the react-router pair, the other 34 alerts closed on the post-push scan.
-
 - [ ] **OPS-43** `[P2]` `[release]` — **`workbench-plugin/` lockfile security refresh — the 9
   open Dependabot alerts on `workbench-plugin/package-lock.json`** (filed 2026-10-05, same
   intake as OPS-41). All dev-only toolchain: `postcss` 8.5.19 (needs ≥ 8.5.23), `js-yaml`

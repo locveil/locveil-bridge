@@ -28,6 +28,17 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — OPS-42 DONE: 34 of the UI's 36 alerts closed; the react-router pair stays
+  open with a reachability note.** axios (the twelve-alert cluster) and react-router-dom moved
+  in the runtime bundle; the rest was toolchain. No overrides were needed, but one package had
+  to move that no alert named: the OpenAPI codegen's parser pins js-yaml to an exact version,
+  so it went up four patches to release it — and the generated types came out byte-identical.
+  The two alerts left open are fixed only in react-router 7, which the Workbench plugin
+  contract rules out as a mere bump. Neither is reachable here: the app is client-rendered
+  with the plain browser router (no hydration data to deserialize — the symbol is not even in
+  the bundle), and its only navigation calls build fixed-prefix paths from the bridge's own
+  ids. `npm audit` also names `braces`, for which no patched release exists.
+
 - **2026-10-05 — OPS-41 DONE: the backend lock is clean again — five packages, nothing else.**
   aiohttp, anyio, cryptography and urllib3 moved to their patched releases through one targeted
   resolve. Two snags, both small: cryptography 50 needed pyOpenSSL 26.4.0 first (26.3.0 caps
