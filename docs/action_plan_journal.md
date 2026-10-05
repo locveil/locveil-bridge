@@ -28,6 +28,17 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — PROD-28 sweep opened: OPS-39 + DOC-19 unblocked, UI-22 filed.** Commons tagged
+  the wave-1 set (`contract-guard-v4.0.0`, `repin-v2.0.0`, `scope-v7.3.0`,
+  `report-protocol-v1.0.1`, `docs-manifest-schema-v1.0.0`, `workbench-v1.3.0`) and the
+  coordinator gave the go. The two blocked tasks matched their filings — only concrete tag
+  names and CI flags were added to the entries. One new task from the coordinator: **UI-22**,
+  pin the `workbench` family and lock the plugin's emitted manifest to the pinned schema; intake
+  found the manifest is assembled inline in the Vite config, so the hermetic test needs its
+  static part extracted to a data file first. Side effect of OPS-38's un-gating, expected: the
+  repin v1 step now sees the new tool majors, so ordinary CI is red until the re-vendor lands —
+  OPS-39 goes first.
+
 - **2026-10-05 — OPS-38 DONE: the contract guard runs on every push.** HK-13's wave 0 for the
   bridge turned out to be half done already: `contracts/**` has pulled the backend suite since
   VWB-15, so layer 2 was running on every contract move — the delegation's worry was voice's
