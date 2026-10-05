@@ -850,6 +850,48 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
+- [ ] **OPS-41** `[P1]` `[release]` — **Backend lockfile security refresh — the four packages
+  behind the 9 open Dependabot alerts on `backend/uv.lock`** (filed 2026-10-05 at the Dependabot
+  intake, owner request: 54 open alerts across three manifests; siblings OPS-42 / OPS-43).
+  Reconciled against the lock: `aiohttp` 3.14.1 (needs ≥ 3.14.3; runtime direct, 1 high + 2
+  medium), `anyio` 4.13.0 (≥ 4.14.2; transitive, 1 critical + 1 medium), `cryptography` 49.0.0
+  (≥ 50.0.0; transitive via pyOpenSSL/pyatv, high), `urllib3` 2.7.0 (≥ 2.8.0; transitive via
+  requests, 2 high + 1 medium). **Scope:** targeted `uv lock --upgrade-package <name>` for
+  exactly these four — no blanket `--upgrade`; widen a `pyproject.toml` range only if the
+  resolver cannot otherwise admit a patched version (`pyOpenSSL<27` vs cryptography 50 is the
+  one to watch). **Guard rail:** the byte-locked catalog artifacts (`contracts/catalog/`
+  golden + openapi) must not move — regenerate and diff; a moved byte stops the upgrade (it
+  would be a contract cut). **DoD:** suite + pyright 0 + import-linter green, contract-guard +
+  `repin --check --fail-on any` clean, the 9 alerts closed on the post-push scan.
+
+- [ ] **OPS-42** `[P1]` `[release]` — **`ui/` lockfile security refresh — the 36 open Dependabot
+  alerts on `ui/package-lock.json`** (filed 2026-10-05, same intake as OPS-41). Reconciled
+  against the lock: **runtime** — `axios` 1.18.0 (needs ≥ 1.20.0; 12 alerts, 7 high),
+  `react-router-dom` 6.30.4 (≥ 6.30.6, GHSA-jjmj-jmhj-qwj2); **dev-only toolchain** —
+  `postcss` 8.5.15 (≥ 8.5.23), `brace-expansion` (1.x ≥ 1.1.21, 2.x ≥ 2.1.7, 5.x ≥ 5.0.12),
+  `browserslist` 4.25.0 (≥ 4.28.7), `fast-uri` 3.1.2 (≥ 3.1.7), `js-yaml` (3.x ≥ 3.15.2,
+  4.x ≥ 4.3.2), `postcss-selector-parser` 6.1.2 (≥ 6.1.3). **Scope:** `npm update <pkg>` /
+  `npm audit fix` without `--force`; an `overrides` entry only where a transitive cannot reach
+  its patched version in-range; raise the `axios` / `react-router-dom` / `postcss` floors in
+  `package.json` to the first patched version so a fresh resolve cannot regress. **Deliberately
+  NOT in scope:** the two `react-router` alerts patched only in 7.18.0 (GHSA-wrjc-x8rr-h8h6,
+  GHSA-337j-9hxr-rhxg) — the Workbench plugin contract freezes the `react-router-dom` singleton
+  at major 6, so a v7 move is a cross-repo contract major, not a dependency bump; they stay
+  OPEN (not dismissed) with a reachability note recorded at completion. **DoD:**
+  `npm run check && npm run build` (`config-ui-stays-functional`), `npm audit` showing only
+  the react-router pair, the other 34 alerts closed on the post-push scan.
+
+- [ ] **OPS-43** `[P2]` `[release]` — **`workbench-plugin/` lockfile security refresh — the 9
+  open Dependabot alerts on `workbench-plugin/package-lock.json`** (filed 2026-10-05, same
+  intake as OPS-41). All dev-only toolchain: `postcss` 8.5.19 (needs ≥ 8.5.23), `js-yaml`
+  4.2.0/4.3.0 (≥ 4.3.2), `brace-expansion` 1.1.16 / 2.1.2 / 5.0.7 (≥ 1.1.21 / 2.1.7 / 5.0.12),
+  `browserslist` 4.28.6 (≥ 4.28.7), `baseline-browser-mapping` 2.10.43 (≥ 2.11.0). **Scope:**
+  same rules as OPS-42 — targeted `npm update`, `overrides` only when unavoidable, no unrelated
+  bumps; the commons `file:` links stay as they are. **Guard rail:** the emitted
+  `dist/manifest.json` must still equal `manifest.fragment.json` + the package version (the
+  CI job's closing check). **DoD:** typecheck + lint + build green, `npm audit` 0, the 9 alerts
+  closed on the post-push scan.
+
 ### CORE — Backend core / architecture
 
 - [ ] **CORE-4** `[P2]` `[deferred]` — **Full `POST /devices/{id}/action` demotion (release-2 candidate).** Decided at the release-1 sign-off (2026-07-06): `/action` ships in release 1 **as the documented internal/dev + UI-fallback door, untouched** — UI-9 removed its last first-party writer, but demoting it before the canonical hardware passes (REL-3, VWB-13) prove coverage would remove the safety net exactly when it might be needed. Post-release scope: strip the UI's un-annotated-control fallback dispatch paths, mark the endpoint internal in the OpenAPI docs (or move it under an internal prefix), and re-examine `/scenario/switch`+`/scenario/shutdown` internalization (the rest of `canonical_first.md` §8 phase 3) in the same pass.

@@ -28,6 +28,15 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — Dependabot intake: OPS-41 / OPS-42 / OPS-43 filed.** 54 open alerts, read
+  against the three lockfiles: 9 on the backend (aiohttp, anyio — one critical —, cryptography,
+  urllib3), 36 on `ui/` (axios ×12 and react-router-dom in the runtime bundle; the rest is the
+  dev toolchain), 9 on the Workbench plugin (toolchain only). One task per manifest so a
+  regression bisects to one lockfile. These are filed rather than taken through the
+  lockfile-only carve-out because the UI one is a version decision: the runtime floors move,
+  and two `react-router` alerts are deliberately left open — their only fix is 7.x, which the
+  plugin contract's major-6 singleton rules out as a dependency bump.
+
 - **2026-10-05 — OPS-40 DONE: scope-v7.3.1, the same day as v7.3.0.** The sweep's last check
   (`repin --check --fail-on any`) came back with one stale tool that had been current minutes
   earlier: commons patched the contract-triad block's wording while the bridge was mid-sweep —
