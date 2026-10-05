@@ -1,13 +1,14 @@
-# repin config for locveil-bridge (OPS-33; vendored scripts/repin.py at repin-v1 —
-# never edit the vendored file, re-pin to move). Families this repo CONSUMES + the
-# HK-12 vendored-tools manifest. Severity ladder:
-# ../locveil-commons/process/contracts.md §5 — pre-commit warns (--fail-on none),
-# ordinary CI fails on major-gap/never-pinned (--fail-on major), release flows run
-# --fail-on any (manual: python3 scripts/repin.py --check --fail-on any).
-# The workbench family joins when commons ships its machine schemas at the next
-# workbench bump — declared now it would nag never-pinned on prose-only artifacts.
-# Owned families (catalog, device-integration, docs-manifest) never appear here:
-# repin tracks what this repo consumes, not what it cuts.
+# repin config for locveil-bridge (OPS-33; v2 shape since OPS-39 — vendored
+# scripts/repin.py at repin-v2.0.0; never edit the vendored file, re-vendor to move).
+# Families this repo CONSUMES + the vendored-tools manifest. No `files` lists: the
+# owner's STAMP `artifacts` at the tag enumerate the pin set. Severity ladder
+# (../locveil-commons/process/contracts.md §5): pre-commit warns (--fail-on none);
+# ordinary CI fails on a major gap / never-pinned family plus touch-the-family
+# (--fail-on major --touched <push base>); the image-dispatch path fails on a
+# minor-or-major family gap (--fail-on minor); vendored-tool version gaps fail only
+# under --fail-on any (manual: python3 scripts/repin.py --check --fail-on any).
+# Owned families (catalog, device-integration) never appear here: repin tracks what
+# this repo consumes, not what it cuts.
 
 [repin]
 pinned_by = "locveil-bridge scripts/repin.py (OPS-33)"
@@ -18,8 +19,6 @@ name = "report-protocol"
 owner_repo = "locveil-commons"
 owner_dir = "../locveil-commons"
 owner_url = "https://github.com/locveil/locveil-commons.git"
-files = ["contracts/report-protocol/report-protocol.json",
-         "contracts/report-protocol/STAMP.json"]
 [[family.dest]]
 path = "contracts/pins/report-protocol"
 conformance = "backend/tests/unit/test_report_protocol_pin.py"
@@ -32,22 +31,23 @@ name = "core-py"
 owner_repo = "locveil-commons"
 owner_dir = "../locveil-commons"
 owner_url = "https://github.com/locveil/locveil-commons.git"
-files = ["packages/core-py/entry_point_loader.py",
-         "contracts/core-py/STAMP.json"]
 [[family.dest]]
 path = "contracts/pins/core-py"
 conformance = "backend/tests/unit/test_core_py_pin_identity.py"
 
-# Vendored-tools manifest (HK-12): each pinned_tag is checked against the owner's
-# newest family tag on the same ladder — the tag↔vendored-copy relationship stops
-# living in prose. Bump a pinned_tag only in its re-vendor ledger task.
+# Vendored-tools manifest: path + pinned_tag + sha256 are written by
+# `python3 scripts/repin.py tool <name>` — never by hand. The tag is checked against
+# the owner's newest; the sha256 proves the vendored copy is unedited (a mismatch
+# fails at every level but `none`). Re-vendor only in a ledger task.
 [[tool]]
 name = "scope-guard"
 family = "scope"
 owner_repo = "locveil-commons"
 owner_dir = "../locveil-commons"
 owner_url = "https://github.com/locveil/locveil-commons.git"
-pinned_tag = "scope-v7.2"
+path = "scripts/scope_guard.py"
+pinned_tag = "scope-v7.3.0"
+sha256 = "294cf4111c7e3e1914b6014c88d99558e3cebaeb736341110208d39bf1e76ba7"
 
 [[tool]]
 name = "contract-guard"
@@ -55,7 +55,9 @@ family = "contract-guard"
 owner_repo = "locveil-commons"
 owner_dir = "../locveil-commons"
 owner_url = "https://github.com/locveil/locveil-commons.git"
-pinned_tag = "contract-guard-v3.1"
+path = "scripts/contract_guard.py"
+pinned_tag = "contract-guard-v4.0.0"
+sha256 = "51e2a0d1599a2b8e1c3d50538d4f1b4684d8314bc0931b9998d02f36206f74fd"
 
 [[tool]]
 name = "repin"
@@ -63,4 +65,6 @@ family = "repin"
 owner_repo = "locveil-commons"
 owner_dir = "../locveil-commons"
 owner_url = "https://github.com/locveil/locveil-commons.git"
-pinned_tag = "repin-v1"
+path = "scripts/repin.py"
+pinned_tag = "repin-v2.0.0"
+sha256 = "2e55faa86fe17763610ad1d4280df3daf1de8892d1620149dfc0ffcb876d30c4"

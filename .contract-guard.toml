@@ -1,5 +1,5 @@
 # locveil-bridge config for the vendored contract-guard (scripts/contract_guard.py,
-# pinned at contract-guard-v3; normative: ../locveil-commons/process/contracts.md §4).
+# pinned at contract-guard-v4.0.0; normative: ../locveil-commons/process/contracts.md §4).
 # vendorable_roots is EXPLICITLY EMPTY — the keeper's recorded posture (OPS-32/PROD-26):
 # no heuristic package-manifest scanning; a dir becomes a contract surface only by a
 # deliberate registry row + STAMP, never by being noticed. Widen the roots in a ledger

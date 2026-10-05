@@ -5,7 +5,7 @@
   "owner_repo": "locveil-commons",
   "owner_commit": "c50e423656cf2b84bd9d8c66b849f489c09648f3",
   "pinned_by": "locveil-bridge scripts/repin.py (OPS-33)",
-  "pin_date": "2026-07-18",
+  "pin_date": "2026-10-05",
   "files": {
     "entry_point_loader.py": "c40438bd21cd9020cf23cb7192c35498fc05373626b39a93ebc9d1bfef355082",
     "STAMP.json": "1476234b12f9ab8c8e349d32cc1d9c59e4a926e21e4b6636cdb89087548165df"

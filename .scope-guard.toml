@@ -1,5 +1,5 @@
 # locveil-bridge ledger-discipline config for the vendored scope-guard
-# (scripts/scope_guard.py, pinned at scope-v7.2; normative conventions:
+# (scripts/scope_guard.py, pinned at scope-v7.3.0; normative conventions:
 # ../locveil-commons/process/ledger-discipline.md + process/claude-md.md). Adopted by
 # OPS-22 from the PROD-13-verified starter; [claude] blocks by OPS-16 (PROD-5/HK-2).
 # Behavior changes happen in commons — re-pin, don't edit the vendored script.
@@ -57,4 +57,4 @@ name = "cross-repo-board"
 sha256 = "0f5e8f63b55c752ddfd542e112f06dd1a6d615c38f1b6f1d57dbeaee7dbdb86a"
 [[claude.blocks]]
 name = "contract-triad"
-sha256 = "a3fe8d6b58d86fd997ef8e17bf8b8216aba09ad4f4978b0bb56fd05ce12d1fc2"
+sha256 = "527e6888d38221fe1070588f736a2ac744ae8304e006db9f56b3a8891c34dddc"

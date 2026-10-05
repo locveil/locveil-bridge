@@ -27,7 +27,8 @@ on:
 # The slow QEMU arm/v7 image builds (~14 min for the UI) remain
 # MANUAL ONLY (`gh workflow run "Build ARM Docker Images (backend + ui)"` or the Actions
 # "Run workflow" button), now with per-image toggles; a dispatch also forces the matching
-# fast checks, since each image build `needs` its green gate.
+# fast checks, since each image build `needs` its green gate — and the contract guard,
+# whose staleness step tightens to a minor-or-major family gap on a dispatch (OPS-39).
 
 # A newer push cancels the previous run's still-in-flight fast checks. The event name is
 # part of the group so a push never cancels a manually dispatched image build.
@@ -100,7 +101,7 @@ jobs:
   ledger-guard:
     # docs/action_plan.md{,_DONE} single-source-of-scope check (single-task-ledger
     # invariant; DOC-4, cut over to the commons scope-guard by OPS-22 — vendored at
-    # scope-v7.2 since OPS-37, config in .scope-guard.toml). Standalone job: scope drift lives in
+    # scope-v7.3.0 since OPS-39, config in .scope-guard.toml). Standalone job: scope drift lives in
     # docs/, and docs-only commits skip backend-test — the guard must not ride a job
     # that gets skipped.
     name: Ledger scope-drift guard
@@ -113,34 +114,42 @@ jobs:
 
   contract-guard:
     # Layer-1 contract coherence (OPS-23, PROD-16/HK-5; convention:
-    # locveil-commons/process/contracts.md §4 — vendored at contract-guard-v3.1 since
-    # OPS-36, the scope-guard consumption model). Checks the contracts/ layout,
-    # STAMP/PIN cores, pinned-copy hashes, and the HK-12 omission rules
-    # (ORPHAN-TAG / CONTENT-DRIFT / VENDORABLE-UNREGISTERED / ARTIFACTS-PATH, config
-    # in .contract-guard.toml); semantics stay in the backend suite's conformance
-    # tests. Local-only by design — it never reaches across repos. Strict here —
-    # no --relax-tags: the pushed tag must exist (the hook relaxes, CI doesn't).
+    # locveil-commons/process/contracts.md §4 — vendored at contract-guard-v4.0.0 since
+    # OPS-39, the scope-guard consumption model; every vendored tool's tag + sha256 is
+    # recorded in .repin.toml). Checks the contracts/ layout, STAMP/PIN cores,
+    # pinned-copy hashes, declared artifacts and their byte-lock to the tag, pin
+    # completeness, reserved names, resolving pointers and the registry's version
+    # strings; semantics stay in the backend suite's conformance tests. Local-only by
+    # design — it never reaches across repos. Strict here — no --relax-tags: the pushed
+    # tag must exist (the hook relaxes, CI doesn't).
     # UNGATED since OPS-38 (council HK-13, contracts.md §4): no `needs: changes`, no
     # path filter — every push, pull request and dispatch runs it, repin step included.
     name: Contract coherence guard
     runs-on: ubuntu-latest
     steps:
+      # Full history: touch-the-family diffs against the push base, and the guard's
+      # byte-lock rules read artifacts at their tags.
       - uses: actions/checkout@v6
         with:
-          fetch-tags: true
-      # Belt over the checkout input: on the shallow-SHA checkout path fetch-tags
-      # has been seen to deliver no tags (voice BUILD-41 finding); TAG-MISSING /
-      # ORPHAN-TAG / CONTENT-DRIFT all resolve tags via `git tag -l` + `git show`.
+          fetch-depth: 0
+      # Never rely on the checkout's own tag handling — fetch them explicitly.
       - name: Fetch tags
-        run: git fetch --tags --depth=1 origin
-      - run: python3 scripts/contract_guard.py --check
-      # HK-12 §5 ordinary-CI severity (OPS-33): pin/tool staleness fails only on a
-      # MAJOR family gap or a never-pinned declared family. Remote-first tokenless
-      # ls-remote (org repos are public); release flows run --fail-on any manually.
-      # Touch-the-family and the image-dispatch gate need repin v2 — they arrive
-      # with the re-vendor (OPS-39); until then this flat level stays.
-      - name: Pin staleness (repin, vendored at repin-v1)
-        run: python3 scripts/repin.py --check --fail-on major
+        run: git fetch --tags --force origin
+      - name: "contract-guard --check (layer 1, strict)"
+        run: python3 scripts/contract_guard.py --check
+      # Staleness ladder (contracts.md §5; repin vendored at repin-v2.0.0 since OPS-39).
+      # Ordinary push / pull request: fail on a MAJOR family gap or a never-pinned
+      # family, plus touch-the-family — a push that changes a pin folder or its
+      # conformance test while that pin trails fails on ANY gap. Image dispatch (the
+      # release path): fail on a MINOR-or-major family gap. Patch gaps and vendored-tool
+      # version gaps only warn at both levels — a commons tool tag never blocks a
+      # hotfix image; a locally edited vendored tool (sha256 mismatch) always fails.
+      # A dispatch has no push base, so --touched gets an empty value and is skipped.
+      - name: "repin --check (staleness: major + touch-the-family; minor on dispatch)"
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          LEVEL: ${{ github.event_name == 'workflow_dispatch' && 'minor' || 'major' }}
+        run: python3 scripts/repin.py --check --fail-on "$LEVEL" --touched "$BASE"
 
   backend-test:
     name: Backend tests (amd64)
@@ -269,7 +278,8 @@ jobs:
   backend-build-arm:
     name: Backend ARM image (GHCR push)
     runs-on: ubuntu-latest
-    needs: backend-test
+    # contract-guard carries the release staleness gate (--fail-on minor on dispatch).
+    needs: [backend-test, contract-guard]
     if: github.event_name == 'workflow_dispatch' && inputs.build_backend
     permissions:
       contents: read
@@ -313,7 +323,8 @@ jobs:
   ui-image:
     name: UI ARM image (GHCR push)
     runs-on: ubuntu-latest
-    needs: ui-validate
+    # contract-guard carries the release staleness gate (--fail-on minor on dispatch).
+    needs: [ui-validate, contract-guard]
     if: github.event_name == 'workflow_dispatch' && inputs.build_ui
     permissions:
       contents: read

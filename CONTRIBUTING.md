@@ -215,8 +215,11 @@ on every push.
   `scripts/contract_guard.py --check`, the contract-coherence check (layout,
   stamps, pinned-copy hashes, a versioned artifact edited without a version
   move; a vendored copy of the shared Locveil contract-guard), followed by the
-  pin-staleness check (`scripts/repin.py --check`). It runs pre-commit too, via
-  the same committed hook as the ledger guard. The semantic half — does the
+  pin-staleness check (`scripts/repin.py --check`): an ordinary push fails only
+  when a pinned contract trails its owner by a major version, or when the push
+  touches a pin (or its conformance test) that trails at all. Both run
+  pre-commit too, via the same committed hook as the ledger guard — there the
+  staleness check only warns. The semantic half — does the
   code still honor each contract — is the backend suite, which is why any
   change under `contracts/` runs `backend-test` as well.
 - **`ui-validate`** (ui/** changed, **or** the backend contract the UI
@@ -227,7 +230,9 @@ on every push.
   or the Actions UI, with per-image toggles (`build_backend` / `build_ui`);
   they don't run on every push because they're ~14 min for the UI. A
   dispatch also runs the matching fast checks — each image build needs its
-  gate green.
+  gate green — and the contract guard, whose staleness check tightens on a
+  dispatch: an image is not built while a pinned contract trails its owner by
+  a minor or major version (re-pin first; a patch gap only warns).
 
 A docs-only commit runs just the ledger guard and the contract guard; a
 backend contract change re-validates the UI too. If you change a Dockerfile or anything in `ops/`,

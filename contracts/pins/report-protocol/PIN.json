@@ -1,14 +1,14 @@
 {
   "contract": "report-protocol",
-  "version": "1",
-  "tag": "report-protocol-v1",
+  "version": "1.0.1",
+  "tag": "report-protocol-v1.0.1",
   "owner_repo": "locveil-commons",
-  "owner_commit": "8fb983f887218fb4ae6d22e049051e62e01ffe6c",
-  "pinned_by": "locveil-bridge VWB-40 (PROD-16 pin relocation; original pin VWB-37, 2026-07-11 — bytes unchanged, tag-verified at both)",
-  "pin_date": "2026-07-12",
+  "owner_commit": "22848677de8f928d6e525da2d8ec2282acfd6068",
+  "pinned_by": "locveil-bridge scripts/repin.py (OPS-33)",
+  "pin_date": "2026-10-05",
   "files": {
     "report-protocol.json": "0f095604091eb67c8c6d8c79ed1c67137e3fdaeba7e3a94704643e8f25625d0c",
-    "STAMP.json": "3056b22ab3f4d091d45733293c1cd55c5486400e919e03a320918db104a2ca5c"
+    "STAMP.json": "ef0e21da59fdde817391934b81512428ad521e0b7c8954faf524b810ddbfe5de"
   },
   "conformance": "backend/tests/unit/test_report_protocol_pin.py"
 }

@@ -866,34 +866,6 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
-- [ ] **OPS-39** `[P1]` `[release]` — **PROD-28 sweep: re-vendor the HK-13 tag set, migrate
-  `.repin.toml`, re-pin, wire the release gates** (board **PROD-28** bridge delegation (b) second
-  half + (c); council **HK-13**; lead VWB-44; filed at intake 2026-10-05). **BLOCKED on the commons
-  wave-1 tag set** (`contract-guard-v4.0.0`, `repin-v2.0.0`, the next `scope-vX` carrying the
-  re-worded contract-triad block, `report-protocol-v1.0.1`) — one sweep, after VWB-44 + VWB-45
-  have landed (guard v4 fails an enumerated README at the owner). **Scope:** (1) re-vendor
-  `scripts/contract_guard.py` @ `contract-guard-v4.0.0`, `scripts/repin.py` @ `repin-v2.0.0`,
-  `scripts/scope_guard.py` + the pinned CLAUDE.md contract-triad block @ the new scope tag (block
-  hash in `.scope-guard.toml`); (2) migrate `.repin.toml` — drop the per-family `files` lists (the
-  pin file set derives from the owner's STAMP `artifacts` at the tag), `[[tool]]` entries gain
-  path + sha256; (3) re-pin `report-protocol` at `report-protocol-v1.0.1` (and any other consumed
-  family the tag set moved — check `core-py` at execution); (4) CI: touch-the-family via repin's
-  diff-base mode, the image-dispatch gate (families fail on a minor-or-major gap; patch and
-  `[[tool]]` gaps warn), replacing today's flat `--fail-on major` where the new levels apply;
-  (5) clear whatever v4 reports on first run — known candidates: vendored-tool tag strings in
-  comments/registry prose, the `docs-manifest` legacy STAMP WARN (retired by DOC-19), pointer
-  fields that must resolve. **Intake reconciliation: valid; claims verified against the repo** —
-  both `[[family]]` blocks carry `files`, the three `[[tool]]` entries carry `pinned_tag` only,
-  the report-protocol pin sits at `report-protocol-v1`, the contract-triad block is marked
-  `scope-v7.1`. **UNBLOCKED 2026-10-05 — the commons tag set is on origin; execution details
-  fixed at the go:** the scope tag is `scope-v7.3.0`, a block-only release (script bytes equal
-  v7.2 — re-vendored anyway so the recorded tag and sha256 are current); EVERY consumed family is
-  re-pinned with repin v2, `core-py` included though its tag did not move (a v2-stamped PIN.json
-  is what makes a pin strict under guard v4); ordinary CI becomes `--fail-on major --touched
-  <push base>` on full history; the image-dispatch path runs `--fail-on minor`; vendored-tool
-  version gaps fail only under `--fail-on any`.
-
-
 ### CORE — Backend core / architecture
 
 - [ ] **CORE-4** `[P2]` `[deferred]` — **Full `POST /devices/{id}/action` demotion (release-2 candidate).** Decided at the release-1 sign-off (2026-07-06): `/action` ships in release 1 **as the documented internal/dev + UI-fallback door, untouched** — UI-9 removed its last first-party writer, but demoting it before the canonical hardware passes (REL-3, VWB-13) prove coverage would remove the safety net exactly when it might be needed. Post-release scope: strip the UI's un-annotated-control fallback dispatch paths, mark the endpoint internal in the OpenAPI docs (or move it under an internal prefix), and re-examine `/scenario/switch`+`/scenario/shutdown` internalization (the rest of `canonical_first.md` §8 phase 3) in the same pass.

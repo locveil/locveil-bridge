@@ -1,10 +1,12 @@
 {
   "contract": "report-protocol",
-  "version": "1",
-  "tag": "report-protocol-v1",
-  "date": "2026-07-12",
+  "version": "1.0.1",
+  "tag": "report-protocol-v1.0.1",
+  "date": "2026-10-05",
   "owner_repo": "locveil-commons",
-  "artifact": "report-protocol.json",
+  "artifacts": [
+    "contracts/report-protocol/report-protocol.json"
+  ],
   "prose_spec": "process/problem-reports.md",
-  "note": "STAMP sidecar added by PROD-16 (HK-5); the in-artifact version field lands at the next protocol bump (v2) to avoid consumer re-pin churn. Tag report-protocol-v1 predates this file's path (artifact moved from process/report-protocol/ 2026-07-12); consumers hold verbatim copies and are unaffected."
+  "note": "v1.0.1 = bytes-only patch (IMPL-13, HK-13/PROD-28): the STAMP declares its artifact and the tag finally carries the STAMP — report-protocol-v1 was cut before this file's path existed, so no pin could be verified complete against it. report-protocol.json is byte-identical to v1; nothing a consumer reads changed. The in-artifact version field still lands at the next protocol bump (v2)."
 }

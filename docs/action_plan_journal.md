@@ -28,6 +28,19 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — OPS-39 DONE: the sweep — guard v4, repin v2, scope v7.3.0, pins re-stamped.**
+  One commit moved the bridge onto the HK-13 tool set. The tools now re-vendor themselves
+  (`repin.py tool <name>` writes the file and records tag + sha256), so "which version is this
+  script" stopped being a comment. `.repin.toml` lost its `files` lists — the owner's STAMP says
+  what a pin contains. Both pins were re-stamped with v2: report-protocol moved to v1.0.1 (the
+  owner's bytes-only patch), core-py stayed at v1.1 but got a fresh PIN so guard v4 treats it as
+  strict. Guard v4's first run failed on exactly one thing, the registry still saying
+  `report-protocol-v1` — the new registry-version rule doing its job. CI: the ungated guard job
+  now diffs against the push base for touch-the-family, and an image dispatch refuses to build
+  over a minor-or-major pin gap; tool gaps only warn there, so a commons tool tag can no longer
+  hold a hotfix image hostage. One warning left on purpose: the internal docs-manifest STAMP,
+  which DOC-19 retires next.
+
 - **2026-10-05 — PROD-28 sweep opened: OPS-39 + DOC-19 unblocked, UI-22 filed.** Commons tagged
   the wave-1 set (`contract-guard-v4.0.0`, `repin-v2.0.0`, `scope-v7.3.0`,
   `report-protocol-v1.0.1`, `docs-manifest-schema-v1.0.0`, `workbench-v1.3.0`) and the

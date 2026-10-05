@@ -644,6 +644,43 @@ possible round-3.
   itself — a docs-coherence gap, not a contract one.
   docs: contributing
   contracts: none — CI wiring only; no surface, stamp or pin moved.
+- [x] **OPS-39** `[P1]` `[release]` — **DONE 2026-10-05** (filed at the PROD-28 intake, executed
+  same day on the coordinator's go; board **PROD-28** bridge delegation (b) second half + (c);
+  council **HK-13**; lead VWB-44). **The sweep: three tools re-vendored at the HK-13 tag set,
+  `.repin.toml` on the v2 shape, both pins re-stamped strict, the release gates wired.**
+  **(a) Re-vendor**, each via the tool (`repin.py tool <name>` — repin itself bootstrapped from
+  the commons copy), tag + sha256 recorded in `.repin.toml`: `scripts/repin.py` @
+  **`repin-v2.0.0`**, `scripts/contract_guard.py` @ **`contract-guard-v4.0.0`**,
+  `scripts/scope_guard.py` @ **`scope-v7.3.0`** (bytes identical to v7.2 — a block-only
+  release; re-vendored so the recorded tag and hash are current). **(b) Block re-pin:** the
+  CLAUDE.md contract-triad block replaced verbatim with the v7.3.0 text (three-level versions,
+  flat pins with reserved names, un-gated guards, release severity), marker `scope-v7.3.0`,
+  sha256 in `.scope-guard.toml` → `527e6888…` (equals commons'); the other two blocks unchanged.
+  **(c) `.repin.toml` → v2:** both `files` lists dropped (the owner's STAMP `artifacts` at the tag
+  enumerate the pin set); every `[[tool]]` carries `path` + `pinned_tag` + `sha256`; header
+  re-written to the v2 ladder. **(d) Re-pins, both with v2:** `report-protocol` v1 →
+  **`report-protocol-v1.0.1`** (bytes-only owner patch — `report-protocol.json` byte-identical,
+  the carried owner STAMP now enumerates it); `core-py` re-stamped at the unchanged
+  `core-py-v1.1` (only `pin_date` moved — a v2-dated PIN.json is what makes the pin strict under
+  guard v4). Pin conformance tests 9/9. **(e) Registry:** `report-protocol-v1` → `-v1.0.1` (guard
+  v4's REGISTRY-VERSION caught it on the first run — the one failure of the sweep); closing
+  paragraph re-truthed to the new ladder. The report-protocol pin README lost its hand re-pin
+  recipe and its stale version strings. **(f) CI** (`build-arm.yml`, the already-ungated
+  `contract-guard` job): full-history checkout + explicit tag fetch; the staleness step is now
+  `repin.py --check --fail-on <level> --touched <base>` — `major` with touch-the-family on push /
+  pull request (base = the push's `before` / the PR base branch), `minor` on an image dispatch;
+  both image-build jobs now `need` the contract guard, so an image is not built over a
+  minor-or-major family gap. Vendored-tool version gaps warn at both levels (fail only under
+  `--fail-on any`); an edited vendored tool fails everywhere. Step names containing `: ` are
+  quoted. **(g)** Version strings in the workflow, `.contract-guard.toml`, `.scope-guard.toml`
+  comments and the `CONTRIBUTING.md` CI section re-truthed. **First v4 run after the sweep:
+  0 failures, 1 warning** — `ARTIFACTS-UNDECLARED` on the legacy `contracts/docs-manifest/`
+  STAMP, retired by DOC-19. `repin --check --fail-on any` exits 0. One commit — every piece is
+  needed for the hook to pass on the new guard. Suite **763**.
+  docs: contributing, contracts-registry
+  contracts: report-protocol re-pinned v1 → v1.0.1 (bytes-only owner patch); core-py pin
+  re-stamped at v1.1 (no content moved); consumed-tool pins bumped — contract-guard v3.1 →
+  v4.0.0, repin v1 → v2.0.0, scope-guard v7.2 → v7.3.0 (+ the contract-triad block text).
 
 ## CORE — Backend core / architecture
 
