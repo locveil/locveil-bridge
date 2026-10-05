@@ -4,8 +4,11 @@ verdict line's presence; everything manifest-aware lives here, on the drift-guar
 pattern, in the normal suite).
 
 Checks:
-- the manifest validates against the pinned org schema (verbatim commons copy at
-  contracts/docs-manifest/ — CI never reaches across repos);
+- the manifest validates against the PINNED org schema — family `docs-manifest-schema`,
+  owned by locveil-commons, pinned at contracts/pins/docs-manifest-schema/ by the
+  vendored repin tool (hermetic: CI never reaches across repos). The manifest itself is
+  instance data, not a contract; this file is the pin's named conformance test
+  (DOC-19, council HK-13 — the hand-kept schema copy and the internal stamp retired);
 - node <-> tree bijection over the declared roots: every file under a root has a node,
   every node's path exists (unless status=pending-gate);
 - diagram nodes are .dot/.png PAIRS with the same basename — one unit;
@@ -32,9 +35,8 @@ BACKEND = Path(__file__).resolve().parents[2]
 REPO = BACKEND.parent
 
 MANIFEST = json.loads((REPO / "docs" / "manifest.json").read_text(encoding="utf-8"))
-SCHEMA = json.loads(
-    (REPO / "contracts" / "docs-manifest" / "manifest.schema.json").read_text(encoding="utf-8")
-)
+PIN_DIR = REPO / "contracts" / "pins" / "docs-manifest-schema"
+SCHEMA = json.loads((PIN_DIR / "manifest.schema.json").read_text(encoding="utf-8"))
 NODES = MANIFEST["nodes"]
 NODE_IDS = {n["id"] for n in NODES}
 
@@ -43,7 +45,23 @@ FLOOR_CLASSES = {"front-door", "quickstart", "operator", "end-user",
 
 
 def test_manifest_validates_against_pinned_schema():
+    Draft202012Validator.check_schema(SCHEMA)
     Draft202012Validator(SCHEMA).validate(MANIFEST)
+
+
+def test_schema_comes_from_the_pin_and_nowhere_else():
+    """One schema copy in the repo: the pin (PIN.json names it, the owner STAMP beside
+    it enumerates it). A second hand-kept copy is how the old one drifted unseen."""
+    pin = json.loads((PIN_DIR / "PIN.json").read_text(encoding="utf-8"))
+    assert pin["contract"] == "docs-manifest-schema"
+    assert "manifest.schema.json" in pin["files"]
+    stamp = json.loads((PIN_DIR / "STAMP.json").read_text(encoding="utf-8"))
+    assert [Path(a).name for a in stamp["artifacts"]] == ["manifest.schema.json"]
+    assert not (REPO / "contracts" / "docs-manifest").exists(), (
+        "contracts/docs-manifest/ is retired — the manifest is instance data"
+    )
+    copies = [p for p in (REPO / "contracts").rglob("manifest.schema.json")]
+    assert copies == [PIN_DIR / "manifest.schema.json"]
 
 
 def test_node_ids_are_unique():

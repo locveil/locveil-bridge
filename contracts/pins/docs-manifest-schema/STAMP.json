@@ -1,0 +1,13 @@
+{
+  "contract": "docs-manifest-schema",
+  "version": "1.0.0",
+  "tag": "docs-manifest-schema-v1.0.0",
+  "date": "2026-10-05",
+  "owner_repo": "locveil-commons",
+  "artifacts": [
+    "process/user-docs/manifest.schema.json"
+  ],
+  "guard": "eval/tests/test_docs_manifest.py",
+  "prose_spec": "process/user-docs.md",
+  "note": "The org-wide docs-manifest vocabulary as a contract (IMPL-14; HK-13 q5, partially reversing HK-6): the SCHEMA is the versioned surface every repo's docs/manifest.json validates against; the per-repo manifests are instance data (process/contracts.md §1) and carry no STAMP. First cut — the schema bytes are the ones the retired internal docs-manifest-v1 stamps pointed at. Products pin this family (contracts/pins/docs-manifest-schema/) so their manifest tests validate hermetically; bump = minor for an additive vocabulary change, major for a breaking reshape."
+}

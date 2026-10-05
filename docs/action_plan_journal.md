@@ -28,6 +28,16 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — DOC-19 DONE: the docs manifest stops being a contract; its schema becomes a
+  pin.** HK-13 reversed half of HK-6: a per-repo manifest is instance data, and the thing three
+  repos were consuming three different ways — the schema — is now a commons-owned family. The
+  bridge pinned `docs-manifest-schema-v1.0.0` with repin v2 and pointed the manifest test at the
+  pin; the internal `contracts/docs-manifest/` folder is gone, and with it the hand copy that had
+  quietly fallen one property behind its "verbatim" source. The manifest validated against the
+  owner's real bytes without an edit. The node id `contract/docs-manifest` was kept and re-homed
+  to the pin README rather than removed, so old completion verdicts still resolve. Contract
+  guard: zero warnings for the first time since v4 landed.
+
 - **2026-10-05 — OPS-39 DONE: the sweep — guard v4, repin v2, scope v7.3.0, pins re-stamped.**
   One commit moved the bridge onto the HK-13 tool set. The tools now re-vendor themselves
   (`repin.py tool <name>` writes the file and records tag + sha256), so "which version is this

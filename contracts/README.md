@@ -13,7 +13,6 @@ history lives in its own README.
 |---|---|---|
 | [`catalog`](catalog/README.md) — the Irene ↔ bridge read contract: golden catalog + pinned OpenAPI schema + the normative guide ([`catalog-contract.md`](catalog/catalog-contract.md)) | locveil-voice (pins a copy in its own repo and the crossover copy in `locveil-commons/contracts/pins/catalog/`) | `catalog/STAMP.json` + tags `catalog-vX.Y.Z` (history: the folder README) |
 | [`device-integration`](device-integration/README.md) — how Locveil-built devices integrate with the bridge: the normative convention ([`convention.md`](device-integration/convention.md)) + descriptor schema + example descriptor | locveil-satellite (pins the convention, authors conforming descriptors) | `device-integration/STAMP.json` + tags `device-integration-vX.Y.Z` (current: `device-integration-v1.2.0`; history: the folder README) |
-| [`docs-manifest`](docs-manifest/README.md) — **INTERNAL**: the docs manifest (`docs/manifest.json`) + the org schema copy it validates against | this repo only (no tag; repo-internal) | `docs-manifest/STAMP.json` (`docs-manifest-vN`, schema reshapes only) |
 
 Cross-reference (a consumed process contract on the **block-pin lane**, not
 relocated): the **scope kit** (`scope-vN`) — the pinned CLAUDE.md blocks and the
@@ -25,6 +24,7 @@ vendored `scripts/scope_guard.py`, enforced by the sha256 block rules in
 | Pin | Owner | Conformance guard |
 |---|---|---|
 | [`report-protocol`](pins/report-protocol/README.md) — the problem-report filing surface (labels, title prefix, report-id/bundle shape) | locveil-commons (tag `report-protocol-v1.0.1`) | `backend/tests/unit/test_report_protocol_pin.py` |
+| [`docs-manifest-schema`](pins/docs-manifest-schema/README.md) — the org-wide schema this repo's docs manifest (`docs/manifest.json`, instance data) validates against | locveil-commons (tag `docs-manifest-schema-v1.0.0`) | `backend/tests/unit/test_docs_manifest.py` |
 | [`core-py`](pins/core-py/README.md) — the shared entry-point-group discovery engine (`DynamicLoader`), vendored as runtime code: the pinned artifact plus a byte-identical importable copy in `backend/` | locveil-commons (tag `core-py-v1.1`) | `backend/tests/unit/test_core_py_pin_identity.py` |
 
 Layer-1 coherence (layout, stamps, pin hashes) is checked by the vendored

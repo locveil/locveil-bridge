@@ -6,6 +6,7 @@
   "required": ["repo", "roots", "surfaces", "nodes"],
   "additionalProperties": false,
   "properties": {
+    "$comment": { "type": "string" },
     "repo": { "type": "string" },
     "roots": {
       "description": "User-facing roots the coherence test sweeps for unregistered files",

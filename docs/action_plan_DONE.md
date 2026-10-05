@@ -1070,6 +1070,31 @@ First real phase to tackle via GSD: **ROADMAP Phase 1 = Fix the Scenario Layer**
   green. docs: none — the two kept docs are internal design/hardware notes (not manifest nodes; the
   manifest roots are architecture/guides/images, not `docs/design`), and archival moves nothing a
   manifest node describes.
+- [x] **DOC-19** `[P1]` `[release]` — **DONE 2026-10-05** (filed at the PROD-28 intake, executed
+  same day after OPS-39; board **PROD-28** bridge delegation (d); council **HK-13** decision 6,
+  partially reversing HK-6; lead VWB-44). **docs-manifest remodel: `docs/manifest.json` is
+  instance data; the contract is the commons-owned schema, now PINNED — the internal stamp and
+  the hand-kept schema copy are gone.** **(a) Pin:** family `docs-manifest-schema` declared in
+  `.repin.toml` and pinned with the vendored repin v2 at **`docs-manifest-schema-v1.0.0`** →
+  `contracts/pins/docs-manifest-schema/` (`manifest.schema.json` + owner STAMP verbatim + strict
+  PIN.json; conformance pointer = the manifest test). **(b) Test**
+  (`test_docs_manifest.py`, 8 → 9): validates the manifest against the PINNED schema
+  (hermetic, schema itself checked as valid draft 2020-12); new test asserts there is exactly
+  one schema copy under `contracts/` — the pin — and that the retired folder stays gone. The
+  manifest validated against the new bytes unchanged. **(c) Retired:** `contracts/docs-manifest/`
+  (README, STAMP, the drifted schema copy — it lacked the owner's node-level `$comment`
+  property, the drift HK-13 found). The git tag `docs-manifest-v1` stays as frozen history.
+  **(d) "No tag" prose re-truthed by removal + restatement:** the false "no git tag is cut"
+  lines (folder README, registry row) are gone; the new pin README says the tag exists, is
+  history, and names nothing current. **(e) Registry:** the Owned `docs-manifest` row left;
+  Consumed gained `docs-manifest-schema` (current tag + conformance test). **(f)**
+  `docs/manifest.json`: node `contract/docs-manifest` KEEPS its id and re-homes to the pin
+  README (root swapped) — earlier completion verdicts that name the id still resolve; no node
+  left the manifest. Guard v4 after the change: **0 failures, 0 warnings** (the last legacy
+  STAMP warning is gone). `repin --check --fail-on any` exits 0. Suite **764**.
+  docs: contract/docs-manifest, contracts-registry
+  contracts: docs-manifest-schema first consumed (pin @ v1.0.0); internal docs-manifest stamp
+  retired.
 
 ## REL — Release
 

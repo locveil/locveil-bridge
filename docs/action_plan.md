@@ -967,26 +967,6 @@ all done; DOC-7 folded into DOC-9.
 
 - ~~**DOC-11**~~ — *reconcile `docs/architecture/ui.md` with canonical-first dispatch; **folded into REL-4** at the release-1 sign-off (2026-07-06, DOC-7→DOC-9 precedent). The finding: the "Scenario manifests — same shape, different routing" section still describes pre-SCN-6 dispatch (controls posted at role devices; since SCN-6 they dispatch through the room's Scenario Manager entity) and claims the `source` device contributes an input-dropdown (scenario manifests deliberately render no inputs control); canonical dispatch as the UI's only write path is explained nowhere.*
 
-- [ ] **DOC-19** `[P1]` `[release]` — **docs-manifest remodel: the schema copy becomes a pin of
-  `docs-manifest-schema`; the internal STAMP retires** (board **PROD-28** bridge delegation (d);
-  council **HK-13** decision 6, partially reversing HK-6; lead VWB-44; filed at intake
-  2026-10-05). `docs/manifest.json` is instance data (`process/contracts.md` §1); the contract is
-  the commons-owned schema. **BLOCKED on commons cutting `docs-manifest-schema-v1.0.0`** and on
-  OPS-39's repin v2 re-vendor (the pin is taken with the vendored tool, never by hand) — rides the
-  sweep, its own commit. **Scope:** declare the family in `.repin.toml` and pin it to
-  `contracts/pins/docs-manifest-schema/`; `test_docs_manifest.py` validates against the pinned
-  schema and becomes the pin's named conformance test; `contracts/docs-manifest/` (README, STAMP,
-  hand copy) retires — the `docs-manifest-v1` git tag stays as frozen history; registry rows moved
-  (Owned → Consumed); `docs/manifest.json` nodes/roots follow (the retired README's node leaves by
-  tombstone per the node policy; the pin README, if any, registers). **Intake reconciliation:
-  valid; both findings verified** — (1) the "verbatim" copy HAS drifted: commons'
-  `process/user-docs/manifest.schema.json` carries a node-level `$comment` property the bridge copy
-  lacks; (2) the "no git tag is cut" prose (the folder README + the registry row) is false — tag
-  `docs-manifest-v1` exists in this repo. Both are re-truthed by retiring the folder, not by
-  editing it. Bridge dissent on the `[release]` tag is on record in HK-13 (this task only waits on
-  commons cuts); ruling accepted. **UNBLOCKED 2026-10-05** — `docs-manifest-schema-v1.0.0` is on
-  origin (artifact `process/user-docs/manifest.schema.json`); runs right after OPS-39.
-
 ### REL — Release
 
 *(All `[release]` REL tasks complete — see `docs/action_plan_DONE.md`. Open `[release]` tasks live

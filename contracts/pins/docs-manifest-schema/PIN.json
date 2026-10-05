@@ -1,0 +1,14 @@
+{
+  "contract": "docs-manifest-schema",
+  "version": "1.0.0",
+  "tag": "docs-manifest-schema-v1.0.0",
+  "owner_repo": "locveil-commons",
+  "owner_commit": "99e0d38aa2cfa8358ea0189f27ba38cb450388d3",
+  "pinned_by": "locveil-bridge scripts/repin.py (OPS-33)",
+  "pin_date": "2026-10-05",
+  "files": {
+    "manifest.schema.json": "755ab6a7c6b11fcdbf72123596f61b1030bcc4f7073cd0a8abf01e8e57e6160e",
+    "STAMP.json": "d906675da6edefb8d26d4d1413cc9f741443acb1645d1849756c1f71802ba4b0"
+  },
+  "conformance": "backend/tests/unit/test_docs_manifest.py"
+}

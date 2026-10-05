@@ -16,7 +16,7 @@
     "contracts/catalog/catalog-contract.md",
     "contracts/device-integration/README.md",
     "contracts/device-integration/convention.md",
-    "contracts/docs-manifest/README.md"
+    "contracts/pins/docs-manifest-schema/README.md"
   ],
   "surfaces": {
     "rest-api": ["backend/src/locveil_bridge/presentation/**"],
@@ -107,9 +107,9 @@
       "canonical": { "invariant": "cross-repo-source-of-truth",
                      "stamp": "contracts/device-integration/STAMP.json",
                      "guard": "backend/tests/unit/test_device_integration_schema.py" } },
-    { "id": "contract/docs-manifest", "path": "contracts/docs-manifest/README.md", "class": "contributor",
+    { "id": "contract/docs-manifest", "path": "contracts/pins/docs-manifest-schema/README.md", "class": "contributor",
       "audience": ["contributor"], "status": "ok",
-      "note": "pointer README for the manifest's own stamp (INTERNAL contract)" },
+      "note": "pin README for the org docs-manifest schema this manifest validates against (the manifest is instance data)" },
     { "id": "diagram/hexagon", "path": "docs/images/hexagon.dot", "class": "diagram",
       "audience": ["contributor"], "covers": ["rest-api", "drivers"], "status": "ok" },
     { "id": "diagram/rest-surface", "path": "docs/images/rest-surface.dot", "class": "diagram",

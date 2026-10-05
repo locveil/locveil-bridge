@@ -35,6 +35,17 @@ owner_url = "https://github.com/locveil/locveil-commons.git"
 path = "contracts/pins/core-py"
 conformance = "backend/tests/unit/test_core_py_pin_identity.py"
 
+# DOC-19 (HK-13): the org-wide docs-manifest vocabulary. docs/manifest.json is
+# instance data; this pinned schema is the contract it validates against, hermetically.
+[[family]]
+name = "docs-manifest-schema"
+owner_repo = "locveil-commons"
+owner_dir = "../locveil-commons"
+owner_url = "https://github.com/locveil/locveil-commons.git"
+[[family.dest]]
+path = "contracts/pins/docs-manifest-schema"
+conformance = "backend/tests/unit/test_docs_manifest.py"
+
 # Vendored-tools manifest: path + pinned_tag + sha256 are written by
 # `python3 scripts/repin.py tool <name>` — never by hand. The tag is checked against
 # the owner's newest; the sha256 proves the vendored copy is unedited (a mismatch
