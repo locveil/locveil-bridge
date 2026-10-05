@@ -792,6 +792,41 @@ endpoint).
   workbench identity for contrast), `remote.png`. `config-ui-stays-functional` gates apply to
   every implementation follow-up.
 
+- [ ] **UI-23** `[P1]` `[release]` — **The Workbench plugin must type-check against the PINNED
+  contract, not the live sibling link** (filed 2026-10-05 at the owner's request; closes the
+  limit UI-22 recorded — "building from the pinned types is a separate decision" — this is that
+  decision, taken). **Verified at intake:** `workbench-plugin/package.json` carries
+  `locveil-workbench` as a `file:` devDependency on `../../locveil-commons/packages/workbench`;
+  `tsc --listFilesOnly` shows the program compiling
+  `locveil-commons/packages/workbench/src/contract.ts` — the commons working copy (in CI: its
+  default branch) — and not `contracts/pins/workbench/contract.ts`. So a change to the contract
+  types in commons reaches this plugin's type-check with no re-pin: the pin states what was
+  verified but is not what is compiled. The package is used for NOTHING else — five imports,
+  all `import type … from 'locveil-workbench/contract'` (`src/plugin.tsx` ×2, `src/i18n.ts`,
+  the three pages), erased at build; no reference in the Vite, Tailwind or ESLint config.
+  **Scope:** (1) resolve `locveil-workbench/contract` for TypeScript to the pinned file via a
+  `paths` mapping in `workbench-plugin/tsconfig.json`. Intake probe: the pinned `contract.ts`
+  imports React types, and from `contracts/pins/workbench/` no `node_modules` is in reach (the
+  probe fails there with TS2307 — today that import resolves inside the commons package's own
+  `node_modules`, which is why CI runs `npm ci` there) — so the mapping needs a companion entry
+  pointing `react` at the plugin's own `@types/react`.
+  (2) Remove the `file:` dependency on `locveil-workbench` (package.json + lock) so the live
+  link cannot silently return. (3) Guard: extend `backend/tests/unit/test_workbench_pin.py` —
+  fails if the mapping is gone or points elsewhere, if a `locveil-workbench` dependency
+  reappears, or if a plugin import of the contract is not type-only; the plugin CI job proves
+  the same from the compiler's side (`tsc --listFilesOnly`: the pinned file is in the program,
+  nothing from the commons workbench package is). (4) CI: the warn-only "pinned vs live-linked"
+  step has no subject once nothing is live-linked — re-purpose it as the failing check in (3);
+  drop the `npm ci` in the commons workbench package (it existed only so the linked
+  `contract.ts` could find React types); keep the built-manifest check; the commons checkout
+  stays for `locveil-ui-kit` (a package-style contract with no pinned bytes — the shell's
+  import-map singleton; its `file:` link is out of scope here). (5) Docs that state the limit:
+  the pin README, the `.repin.toml` family comment, the CI job header. **Done when:**
+  `npm ci && npm run check && npm run build` green with `dist/manifest.json` and the bundle
+  unchanged; a breaking edit to a scratch COPY of the contract, mapped in place of the pin,
+  fails `tsc` (proof the mapped file is what compiles); backend suite + pyright green;
+  contract-guard 0 failures; `repin --check --fail-on any` exits 0; CI green.
+
 ### OPS — Docker / CI-CD / deploy / ops
 
 - [ ] **OPS-11** `[P2]` `[deferred]` — **Multi-arch images: add `linux/arm64` (aarch64, next-gen Wirenboard) alongside `linux/arm/v7`.** Filed 2026-07-02 off a chat analysis (sister-repo prompt: `locveil-voice` builds armv7 + aarch64 + standalone). **Unlike the voice repo** (per-target Dockerfiles + arch-suffixed image names, forced by per-platform ML profiles), the bridge's images are identical on both arches → use buildx **multi-platform manifests**: `platforms: linux/arm/v7,linux/arm64` in both image jobs of `.github/workflows/build-arm.yml` yields ONE manifest list per existing tag — WB7 pulls armv7, WB8 pulls arm64 from the same `ghcr.io/...:latest`; `ops/` (compose / `update.sh` / INSTALL.md flow) unchanged. **Work items:** (1) workflow: extend `platforms`, **drop the `ARCH=arm32v7` build-arg** — the Dockerfile's `${ARCH:+$ARCH/}python` prefix predates platform-aware buildx and would force the arm32 base into the arm64 leg (Dockerfile itself needs no change; `ARG ARCH=` defaults empty); (2) `ui/Dockerfile`: stage 1 → `FROM --platform=$BUILDPLATFORM node:20 AS builder` — the `dist/` bundle is arch-independent, so the ~14-min QEMU node build runs natively on the amd64 runner once and only the small nginx stage builds per-arch (bonus: the *existing* armv7 UI build should drop to ~2-3 min); (3) docs: a sentence each in `ops/INSTALL.md` + the READMEs noting the images are multi-arch. **Notes:** piwheels extra-index is armv7-only but harmless on arm64 (PyPI aarch64 cp311 wheel coverage is good — likely a faster leg than armv7); that `/etc/pip/pip.conf` is probably vestigial anyway since the image installs via `uv`, which doesn't read pip config — verify/drop while in there. WB8's Cortex-A5x could in principle run the armv7 image via AArch32 compat, but native arm64 is the clean path at ~6 lines of diff. **Verification:** QEMU build smoke in CI; real run gated on actual WB8 hardware (hence `[later]`).
