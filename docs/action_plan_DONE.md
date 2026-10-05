@@ -215,6 +215,46 @@ possible round-3.
   docs: none — STAMP/generator internals; no manifest-node behavior changes.
   contracts: catalog-v1.8 cut (STAMP artifact paths → repo-root-relative; surface content
   byte-identical); re-pin owed: voice, commons (voice's multi-dest catalog run updates both).
+- [x] **VWB-44** `[P1]` `[release]` — **DONE 2026-10-05** (filed + executed same day; board
+  **PROD-28** bridge delegation (a), first half; council **HK-13** decision 5 — reserved names.
+  **LEAD ID of the PROD-28 bridge set: VWB-44 · VWB-45 · OPS-38 · OPS-39 · DOC-19.**) **Catalog
+  README split: the normative text is now the pinned guide `contracts/catalog/catalog-contract.md`;
+  deliberate MINOR cut `catalog-v1.10.0` — the family's first three-part version.** The rule
+  being met: inside a pin folder the name `README.md` belongs to the consumer, so an owner never
+  enumerates one; prose a consumer must hold lives in a named guide that IS enumerated.
+  **(a) The guide** carries what consumers rely on — the artifact-set table, param semantics
+  (moved verbatim), the versioning rule re-written to three levels (major = breaking, minor =
+  surface changed incl. the set gaining a file, patch = enumerated bytes moved with no surface
+  change), the content-hash-is-not-a-version rule, the stamp's fields, how to pin. It names no
+  "current version" and links only to files that sit beside it in a flat pin folder, so it never
+  needs an edit just because a cut happened. **(b) The README** stays as the UNLOCKED owner-side
+  index: intro, a per-version history list (replacing the run-on Versioning paragraph; v1.10.0
+  narrated), the file table with a "pinned" column, regeneration, drift guard, realism check. Two
+  stale sentences fixed: voice pins a local copy as well as the commons crossover copy; a
+  config-driven golden refresh is a PATCH cut, not "zero contract change" — the Regeneration
+  section now spells the cut order (bump the constant → regenerate → commit artifacts + stamp →
+  tag → push together). **(c) Generator:** the artifacts list became the module constant
+  `STAMP_ARTIFACTS` in `cli/dump_catalog.py` (golden + openapi + guide; README out), with the
+  reserved-name / flat-pin rule in its comment. **(d)** `CONTRACT_VERSION` 1.9 → **"1.10.0"**
+  (`presentation/api/catalog.py`), its comment re-written to the three-level rule. **(e) Tests**
+  (`test_contracts_golden.py`, 8 → 11): the stamp's `artifacts` must equal `STAMP_ARTIFACTS`; the
+  version is three-part; the pinned set carries no reserved file name (`README.md` / `PIN.json` /
+  `STAMP.json`), no duplicate file names, every path exists; the guide holds the two normative
+  sections and the README points at it instead of restating them. The stale "fix from backend/"
+  docstring re-truthed to the repo-root commands. **(f) Registry:** the catalog row names the
+  guide and both voice pin destinations; the historical "(first: `catalog-v1.5`)" string left the
+  registry (version strings there name only the current stamp/pin tag — the rule guard v4 will
+  enforce). **(g)** `docs/manifest.json`: new root + canonical-reference node
+  `contract/catalog-guide` (stamp + guard pointers); `contract/catalog` stays on the README,
+  re-classed `contributor` (it is no longer the version-stamped text). STAMP regenerated from the
+  repo root: version/tag/date/artifacts/`bridge_commit` moved; golden BYTE-IDENTICAL
+  (`5622ba7a1a78102a`), `openapi.json` byte-identical — no UI regen. Lightweight tag
+  **`catalog-v1.10.0`** on the landing commit (family style), pushed with it. Suite **760**,
+  pyright 0, import-linter 6/6.
+  docs: contract/catalog-guide, contract/catalog, contracts-registry, contributing
+  contracts: catalog-v1.10.0 cut (minor — the pinned set gained `catalog-contract.md` and lost
+  the README; golden + openapi byte-identical); re-pin owed: voice, commons (voice's multi-dest
+  catalog run updates both destinations — scheduled in its own PROD-28 sweep).
 
 ## UI — config-ui
 

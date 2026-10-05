@@ -664,32 +664,6 @@ endpoint).
   satellite's first conforming descriptor (the PROD-20 chain). *(Dep line re-anchored 2026-07-14,
   DOC-16.)*
 
-- [ ] **VWB-44** `[P1]` `[release]` — **Catalog README split — contract cut `catalog-v1.10.0`**
-  (board **PROD-28** bridge delegation (a), first half; council **HK-13** decision 5, reserved
-  names. **LEAD ID of the PROD-28 bridge set: VWB-44 · VWB-45 · OPS-38 · OPS-39 · DOC-19** —
-  pulled + verified at intake 2026-10-05; all five `[release]` by owner ruling q8). The rule: inside
-  a pin folder `README.md` belongs to the consumer, so an owner never enumerates one — normative
-  prose a consumer must hold moves to a named, enumerated guide. **Scope:** new enumerated
-  `contracts/catalog/catalog-contract.md` (param semantics + the versioning rule, re-written to
-  the three-level rule: major = breaking, minor = surface changed incl. the pinned set gaining a
-  file, patch = enumerated bytes moved with no surface change); `contracts/catalog/README.md` stays
-  UNLOCKED and un-enumerated (intro, version changelog, file list, regeneration how-to, drift-guard
-  and realism notes); generator artifacts list; `CONTRACT_VERSION` → `"1.10.0"` (three-part from
-  here on; old tags frozen); the version-triple test; `docs/manifest.json` (new canonical node +
-  root for the guide); registry row; tag `catalog-v1.10.0` on the landing commit, pushed with it.
-  This is a MINOR cut (the pinned set gains a file). **Must land before contract-guard v4 is
-  vendored** (v4 fails an enumerated README at the owner; v3.1 accepts either shape).
-  **Intake reconciliation (valid, three narrowings):** (i) the delegation's "three-level versions
-  in `dump_catalog.py`" — the version constant and its rule comment live in
-  `presentation/api/catalog.py`; `dump_catalog.py` holds the artifacts list and derives the tag —
-  both move. (ii) Two README sentences are stale beyond the delegation's list and are fixed in the
-  cut: "the voice side pins into commons" (voice also holds a local pin) and "the golden's content
-  hash moves with zero contract change" (since HK-13 a config-driven refresh of the enumerated
-  golden is a PATCH cut). (iii) Registry rule (guard v4): a `<family>-v<digits>` string in
-  `contracts/README.md` must equal the current STAMP/PIN tag — the catalog row's
-  "(first: `catalog-v1.5`)" leaves the registry here (history stays in the README changelog).
-  Re-pin owed on completion: voice (both destinations), commons.
-
 - [ ] **VWB-45** `[P1]` `[release]` — **Device-integration README split — contract cut
   `device-integration-v1.2.0`** (board **PROD-28** bridge delegation (a), second half; council
   **HK-13** decision 5; lead VWB-44; filed at intake 2026-10-05). Same rule as VWB-44, separate

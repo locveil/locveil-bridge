@@ -9,7 +9,8 @@ are sorted by id so the emitted JSON and its content-hash are stable across runs
 The committed artifact set (``contracts/catalog/``) is the Irene↔bridge contract
 of record: the voice side pins its own copy (one-way, outward — the bridge never
 writes into a sibling repo). ``--stamp`` additionally records the STAMP core
-(contract/version/tag/date/owner_repo, from ``CONTRACT_VERSION``) plus which bridge
+(contract/version/tag/date/owner_repo, from ``CONTRACT_VERSION``), the ``artifacts``
+list (``STAMP_ARTIFACTS`` — the pinned set) plus which bridge
 build generated the artifacts (the content-hash tracks config drift; the commit
 stamp tracks the code build; neither substitutes for the other).
 """
@@ -31,6 +32,20 @@ from locveil_bridge.domain.scenarios.service import ScenarioManager
 from locveil_bridge.infrastructure.capabilities.loader import attach_capability_maps
 from locveil_bridge.infrastructure.config.manager import ConfigManager
 from locveil_bridge.presentation.api.catalog import CONTRACT_VERSION, build_catalog
+
+
+# The pinned set: what a consumer's pin copies and what the contract checks byte-lock
+# against the tag (STAMP.json itself always travels implicitly). Repo-root-relative —
+# contract-guard resolves each entry via `git show <tag>:<path>` from the repo root.
+# Never a file named README.md / PIN.json / STAMP.json (inside a pin folder those names
+# are reserved), never two entries with the same file name (pins are flat): the
+# normative prose lives in the named guide, and contracts/catalog/README.md stays an
+# unlocked owner-side index outside this list.
+STAMP_ARTIFACTS = (
+    "contracts/catalog/catalog.golden.json",
+    "contracts/catalog/openapi.json",
+    "contracts/catalog/catalog-contract.md",
+)
 
 
 class _NullStore(StateRepositoryPort):
@@ -139,14 +154,7 @@ def main() -> int:
             "tag": f"catalog-v{CONTRACT_VERSION}",
             "date": datetime.date.today().isoformat(),
             "owner_repo": "locveil-bridge",
-            # Repo-root-relative: contract-guard resolves each entry via
-            # `git show <tag>:<path>` from the repo root — a bare name would make
-            # the golden/openapi unverifiable and compare the wrong README.
-            "artifacts": [
-                "contracts/catalog/catalog.golden.json",
-                "contracts/catalog/openapi.json",
-                "contracts/catalog/README.md",
-            ],
+            "artifacts": list(STAMP_ARTIFACTS),
             "bridge_commit": _git_commit(),
             "bridge_version": __version__,
             "catalog_version": catalog.version,

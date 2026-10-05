@@ -28,6 +28,18 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — VWB-44 DONE: the catalog README split, `catalog-v1.10.0`.** First of the two
+  owner cuts HK-13 asks of the bridge. The normative half of the catalog README — param
+  semantics and the versioning rule — moved to a new pinned guide,
+  `contracts/catalog/catalog-contract.md`; the README stays as an unlocked index (history, file
+  list, regeneration) and left the stamp's `artifacts`. The versioning rule was rewritten to the
+  three-level form while it moved, and the constant became `"1.10.0"` — three-part tags from
+  here on. The one behavioural consequence worth remembering: a house-config change that moves
+  the committed golden is now a **patch cut** (bump the constant, regenerate, tag), and the
+  README says so step by step; the drift rule has enforced "no silent move" since v1.8, the
+  prose had not caught up. Golden and OpenAPI byte-identical, so no UI regen and nothing for a
+  consumer to adopt beyond pinning the new file. Voice and commons owe a re-pin.
+
 - **2026-10-05 — PROD-28 intake (council HK-13): five tasks filed, lead VWB-44.** The board's
   bridge delegation pulled and verified against the repo per `task-start-reconciliation`. Filed,
   all `[release]` by owner ruling: **VWB-44** (catalog README split → `catalog-v1.10.0`),

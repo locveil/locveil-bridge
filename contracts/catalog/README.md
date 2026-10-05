@@ -3,45 +3,57 @@
 This directory is the **contract of record** between the bridge and its non-UI
 consumers — first among them the `locveil-voice` assistant (Irene). The bridge is the
 *generator and source of truth*: artifacts are committed **here** and never pushed
-into a sibling repository. The voice side pins its own copy (into
-`locveil-commons/contracts/pins/catalog/`) — a one-way, outward, version-stamped sync.
+into a sibling repository. The voice side pins its own copies — one inside its own
+repository, one in the shared crossover location
+(`locveil-commons/contracts/pins/catalog/`) — a one-way, outward, version-stamped sync.
 The [registry one level up](../README.md) indexes every contract this repo owns or
 consumes; the org-wide rules live in the Locveil contract convention
 (`locveil-commons/process/contracts.md`).
 
-## Versioning
-
-The contract is versioned by **family-named git tags** `catalog-vN.M` together with
-`STAMP.json` — since **`catalog-v1.5`**, the first tag, those two are the
-machine-readable version authority: no contract version exists that is not in a
-stamp. The earlier v1.1–v1.4 lineage predates tagging and lives on as the prose
-"since contract vX" notes throughout this document — frozen history, not
-retro-tagged. v1.5 itself changed no contract surface: it is the convention cut that
-gave the family its layout, stamp core, and first tag. v1.6 (additive) rewrote the
-OpenAPI field descriptions reader-first — no structural change, no golden change —
-and the STAMP now enumerates the artifact set (`artifacts`) so a consumer's pin can
-be checked for completeness. v1.7 (additive) renamed the backend import package to
-`locveil_bridge`: the module-qualified names of the two `ManualInstructions` schema
-variants in `openapi.json` changed prefix accordingly — a schema-name rename, no
-field or structural change, and the golden catalog is byte-identical. v1.8
-(administrative) moved the STAMP's `artifacts` enumeration to repo-root-relative
-paths — no schema, field, or golden change. v1.9 (additive) refined the canonical
-endpoint's error mapping: a reachability failure reported by the device handler
-itself now surfaces as `device_unreachable` (503), consistent with the echo-timeout
-path — previously such failures fell through to `internal_error` (500); the endpoint
-description documents the mapping, and the golden is byte-identical. Additive changes bump the
-minor version, breaking changes the major; the version is carried in code as the
-catalog projection's `CONTRACT_VERSION` constant and flows into the STAMP at
-regeneration. The golden's *content hash* is *not* a version — it moves whenever the
-house config changes, with zero contract change.
+**What a consumer may rely on is written in [`catalog-contract.md`](catalog-contract.md)**
+— param semantics, the versioning rule, the stamp's fields, how to pin. That guide is
+part of the versioned artifact set and travels with every pinned copy. This README is
+not: it is the owner-side index — history, the file list, and how to regenerate — and
+may change without a contract version.
 
 ## Files
 
-| File | What it is |
-|---|---|
-| `catalog.golden.json` | The golden catalog sample — the full house as `GET /system/catalog` serves it: rooms, devices (including the `global` aggregates and the per-room `scenario_manager_*` entities), capabilities with action **param descriptors** (typed `CatalogParam`: name/type/required/default/min/max/`unit`/`values`/`options_from` — the schema of record for param parsing) and `{wire, canonical, labels}` enum value tables. Generated offline and deterministically from `config/` — same projection code path as the live endpoint. |
-| `openapi.json` | The pinned API schema of record — carries `CatalogResponse`, the canonical action request/response shapes, and (since contract v1.4) the problem-report surface: `EvidenceEnvelope`, the shape `GET /reports/evidence` returns — the bridge-side evidence a voice-filed problem report embeds when the smart home is involved. Byte-identical to `backend/openapi.json` (the UI-consumed copy). |
-| `STAMP.json` | The version stamp: the contract core (`contract`, `version`, `tag`, `date`, `owner_repo` — since contract v1.5) plus the build record — which bridge commit + version last generated these artifacts, and the golden's content-hash. The content-hash tracks *config* drift (Irene re-fetches when the retained `bridge/catalog/version` topic changes); the commit stamp tracks the *code build* the voice side coded against. Neither substitutes for the other. The commit named is the build the artifacts were generated **from** (i.e. the parent of the commit that lands them). |
+| File | Pinned | What it is |
+|---|---|---|
+| `catalog.golden.json` | yes | The golden catalog sample — the full house as `GET /system/catalog` serves it: rooms, devices (including the `global` aggregates and the per-room `scenario_manager_*` entities), capabilities with action **param descriptors** (typed `CatalogParam`: name/type/required/default/min/max/`unit`/`values`/`options_from` — the schema of record for param parsing) and `{wire, canonical, labels}` enum value tables. Generated offline and deterministically from `config/` — same projection code path as the live endpoint. |
+| `openapi.json` | yes | The pinned API schema of record — carries `CatalogResponse`, the canonical action request/response shapes, and (since contract v1.4) the problem-report surface: `EvidenceEnvelope`, the shape `GET /reports/evidence` returns — the bridge-side evidence a voice-filed problem report embeds when the smart home is involved. Byte-identical to `backend/openapi.json` (the UI-consumed copy). |
+| `catalog-contract.md` | yes | The normative guide (since contract v1.10.0) — the semantics the machine artifacts cannot state. Hand-written; an edit is a contract cut. |
+| `STAMP.json` | yes (always travels with the set) | The version stamp: the contract core (`contract`, `version`, `tag`, `date`, `owner_repo` — since contract v1.5), the `artifacts` list naming the pinned files above, plus the build record — which bridge commit + version last generated these artifacts, and the golden's content-hash. The commit named is the build the artifacts were generated **from** (i.e. the parent of the commit that lands them). |
+| `README.md` | no | This file. Deliberately outside the pinned set: inside a consumer's pin folder the name `README.md` belongs to the consumer. |
+
+## Version history
+
+The versioning *rule* — three levels, what each means for a pinned copy — is in the
+[guide](catalog-contract.md#versioning). This is the narrative record of the cuts; the
+stamp and the tag are the machine-readable authority.
+
+- **v1.1–v1.4** predate tagging. They live on as the "since contract vX" notes in the
+  guide — frozen history, not retro-tagged.
+- **v1.5** — the first tag. No contract surface changed: the convention cut that gave
+  the family its layout, stamp core, and tag.
+- **v1.6** — the OpenAPI field descriptions rewritten reader-first; no structural
+  change, no golden change. The stamp began enumerating the artifact set (`artifacts`)
+  so a consumer's pin can be checked for completeness.
+- **v1.7** — the backend import package renamed to `locveil_bridge`: the
+  module-qualified names of the two `ManualInstructions` schema variants in
+  `openapi.json` changed prefix accordingly — a schema-name rename, no field or
+  structural change; golden byte-identical.
+- **v1.8** — administrative: the stamp's `artifacts` enumeration moved to
+  repo-root-relative paths. No schema, field, or golden change.
+- **v1.9** — the canonical endpoint's error mapping refined: a reachability failure
+  reported by the device handler itself now surfaces as `device_unreachable` (503),
+  consistent with the echo-timeout path — previously such failures fell through to
+  `internal_error` (500). The endpoint description documents the mapping; golden
+  byte-identical.
+- **v1.10.0** — the normative text moved out of this README into the new pinned guide
+  `catalog-contract.md`, and this README left the pinned set (a minor: the set gained
+  a file). Versions gained a third level and tags became three-part from this cut on;
+  the versioning rule was rewritten to match. Golden and OpenAPI schema byte-identical.
 
 ## Regeneration
 
@@ -57,39 +69,28 @@ uv run --project backend locveil-openapi -o backend/openapi.json && cp backend/o
 rooms + scenario definitions, no drivers, no network, no broker — so the dump is
 deterministic (devices sorted by id; identical bytes across runs).
 
-## Param semantics (since contract v1.1)
+**Every regeneration that moves a pinned file is a contract cut.** The version lives
+in code as the catalog projection's `CONTRACT_VERSION` constant and flows into the
+stamp at regeneration, so the order is:
 
-- **`unit`** on a param is the semantic unit of the value (`°C`, `%`, `dB`, `min`) —
-  what a voice consumer needs to parse «поставь двадцать два градуса» against a
-  °C-shaped target. Constraints (min/max/type) always come from the same native spec
-  the driver enforces.
-- **`values`** carries the `{wire, canonical, labels}` table when the choice set is
-  **bridge-known and static** (e.g. the scenario enum — labels are localized, ru/en).
-  Since contract v1.3 this includes action params whose choice set lives on a
-  same-named read-side field (the HVAC `set_mode(mode)` / `set_fan(fan)` family):
-  the param mirrors the field's table, so «кондиционер на охлаждение» validates
-  against the same triplets the state reads back. The canonical param name always
-  equals the field name — that correspondence is the rule, not a coincidence.
-- **`options_from`** marks an **intentionally open set**: the choices are
-  runtime-dynamic (installed apps change with every install) and enumerable via
-  `GET /devices/{id}/options/<options_from>`. A param carries *either* `values` *or*
-  `options_from`, never both — an open set frozen into the golden would drift.
-- **Selection capabilities advertise `set`** (since contract v1.2): a capability
-  that switches between options (`input` on TVs, amps, streamers) carries a `set`
-  action with one required `value` param. Devices with a **closed** option set (one
-  native command per input) embed it as static `values` — the consumer can validate
-  «переключи на CD» without a round-trip; devices with a **runtime** set carry
-  `options_from: "inputs"` instead. Same rule as above: either/or, never both.
-- **No empty capability husks:** a capability with neither invocable actions nor
-  readable fields is suppressed from the catalog. (The TVs' `input` was the one case
-  — it carries a real `set` since contract v1.2 and is back in the catalog.)
+1. Bump `CONTRACT_VERSION` at the right level — see the guide's table. A house-config
+   change that only refreshes the golden (its content hash moves, nothing else) is a
+   **patch**; so is an editorial fix to the guide.
+2. Regenerate with the commands above (the stamp picks up the new version and tag).
+3. Add a line to the version history here for a minor or major cut.
+4. Commit artifacts and stamp together, tag that commit `catalog-v<version>`, and push
+   the commit and the tag together.
+
+The repo's contract checks enforce this: a pinned file whose bytes differ from the
+stamp's tag, with no version move, fails at commit.
 
 ## Drift guard
 
-`backend/tests/unit/test_contracts_golden.py` regenerates both artifacts inside the
-normal backend test job and fails if the committed copies are stale — any config,
-capability-map, or API change that alters the contract without a re-dump breaks CI
-with the one-command fix above.
+`backend/tests/unit/test_contracts_golden.py` regenerates both generated artifacts
+inside the normal backend test job and fails if the committed copies are stale — any
+config, capability-map, or API change that alters the contract without a re-dump
+breaks CI with the one-command fix above. The same test holds the version triple
+together (code constant, stamp, tag string) and the shape of the pinned set.
 
 ## Realism check
 

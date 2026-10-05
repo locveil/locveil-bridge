@@ -7,17 +7,23 @@ the normal backend test job, so the check is self-contained in CI: any config /
 capability-map / API change that alters the contract without a re-dump fails here
 with a one-command fix.
 
-Fix on failure (from backend/):
-    uv run locveil-catalog --stamp ../contracts/catalog/STAMP.json
-    uv run locveil-openapi -o openapi.json && cp openapi.json ../contracts/catalog/openapi.json
+Fix on failure (from the REPO ROOT — a regeneration that moves a pinned file is a
+contract cut, so bump `CONTRACT_VERSION` first: patch for a config-driven golden
+refresh, minor/major when the surface changed; then tag the landing commit):
+    uv run --project backend locveil-catalog --stamp contracts/catalog/STAMP.json
+    uv run --project backend locveil-openapi -o backend/openapi.json && cp backend/openapi.json contracts/catalog/openapi.json
+
+The same file holds the version triple together (code constant, STAMP, tag string) and
+the shape of the pinned set (`STAMP_ARTIFACTS` — the guide in, the folder README out).
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
-from locveil_bridge.cli.dump_catalog import build_offline_catalog
+from locveil_bridge.cli.dump_catalog import STAMP_ARTIFACTS, build_offline_catalog
 from locveil_bridge.cli.dump_openapi import generate_openapi
 from locveil_bridge.presentation.api.catalog import CONTRACT_VERSION
 
@@ -31,7 +37,9 @@ _REGEN_HINT = (
     "contract artifact stale — regenerate FROM THE REPO ROOT: "
     "`uv run --project backend locveil-catalog --stamp contracts/catalog/STAMP.json` "
     "(and `uv run --project backend locveil-openapi -o backend/openapi.json && "
-    "cp backend/openapi.json contracts/catalog/openapi.json` for the API schema)"
+    "cp backend/openapi.json contracts/catalog/openapi.json` for the API schema). "
+    "A regeneration that moves a pinned file is a contract cut: bump CONTRACT_VERSION "
+    "first (patch for a config-driven golden refresh), then tag the landing commit."
 )
 
 
@@ -122,14 +130,14 @@ def test_stamp_carries_contract_core_and_names_a_bridge_build():
         "contract", "version", "tag", "date", "owner_repo", "artifacts",
         "bridge_commit", "bridge_version", "catalog_version",
     }
-    # pin-completeness forward requirement: the artifact set a consumer's pin must copy.
-    # Repo-root-relative since catalog-v1.8 — contract-guard resolves each entry via
-    # `git show <tag>:<path>` from the repo root; bare names left the golden/openapi
-    # unverifiable and compared the wrong README.
+    # The pinned set: what a consumer's pin copies and what the drift rule byte-locks.
+    # Repo-root-relative since catalog-v1.8; since catalog-v1.10.0 the normative prose
+    # is the named guide and the README is OUT of the set (see the shape test below).
+    assert stamp["artifacts"] == list(STAMP_ARTIFACTS), _REGEN_HINT
     assert set(stamp["artifacts"]) == {
         "contracts/catalog/catalog.golden.json",
         "contracts/catalog/openapi.json",
-        "contracts/catalog/README.md",
+        "contracts/catalog/catalog-contract.md",
     }
     assert stamp["contract"] == "catalog"
     assert stamp["version"] == CONTRACT_VERSION, _REGEN_HINT
@@ -138,6 +146,39 @@ def test_stamp_carries_contract_core_and_names_a_bridge_build():
     committed = json.loads((CONTRACTS / "catalog.golden.json").read_text(encoding="utf-8"))
     # the stamp's catalog hash must match the committed golden (they travel together)
     assert stamp["catalog_version"] == committed["version"], _REGEN_HINT
+
+
+def test_stamp_version_is_three_part():
+    """Since catalog-v1.10.0 versions are MAJOR.MINOR.PATCH and tags are three-part
+    (major = breaking, minor = surface changed, patch = enumerated bytes moved with no
+    surface change — e.g. a config-driven golden refresh)."""
+    assert re.fullmatch(r"\d+\.\d+\.\d+", CONTRACT_VERSION), (
+        f"CONTRACT_VERSION {CONTRACT_VERSION!r} must be three-part (X.Y.Z)"
+    )
+
+
+def test_pinned_set_shape_survives_a_flat_pin_folder():
+    """A consumer's pin folder is FLAT and two names in it belong to the consumer
+    (README.md, PIN.json); STAMP.json travels implicitly. So the owner never enumerates
+    a file with a reserved name, never two files sharing a name — and every enumerated
+    path exists. The normative guide is in the set; the folder README is not."""
+    names = [Path(a).name for a in STAMP_ARTIFACTS]
+    assert not {"README.md", "PIN.json", "STAMP.json"} & set(names)
+    assert len(names) == len(set(names)), f"duplicate file names in the pinned set: {names}"
+    for artifact in STAMP_ARTIFACTS:
+        assert (REPO / artifact).is_file(), f"enumerated artifact missing: {artifact}"
+    assert "contracts/catalog/catalog-contract.md" in STAMP_ARTIFACTS
+
+
+def test_guide_holds_the_normative_text_and_the_readme_points_at_it():
+    """The split's two halves stay put: param semantics + the versioning rule live in
+    the pinned guide; the unlocked README links to it instead of restating it."""
+    guide = (CONTRACTS / "catalog-contract.md").read_text(encoding="utf-8")
+    for heading in ("## Param semantics", "## Versioning"):
+        assert heading in guide, f"catalog-contract.md lost its {heading!r} section"
+    readme = (CONTRACTS / "README.md").read_text(encoding="utf-8")
+    assert "(catalog-contract.md)" in readme
+    assert "## Param semantics" not in readme
 
 
 def test_contract_v13_hvac_action_params_carry_field_value_tables():

@@ -39,11 +39,17 @@ from locveil_bridge.presentation.api.schemas import (
     CatalogValueLabel,
 )
 
-# The catalog contract's version (family tags `catalog-vN.M`, process/contracts.md in
-# locveil-commons): distinct from the content-hash `CatalogResponse.version`, which moves
-# on config changes with zero contract change. Bump on deliberate contract cuts only
-# (additive = minor, breaking = major); the STAMP.json beside the golden carries it.
-CONTRACT_VERSION = "1.9"
+# The catalog contract's version — always three-part since 1.10.0 (family tags
+# `catalog-vX.Y.Z`; process/contracts.md §3 in locveil-commons). Three levels:
+#   major = breaking; minor = the surface changed (additive — including the pinned set
+#   gaining a file); patch = enumerated bytes moved with no surface change (a
+#   config-driven golden refresh, an editorial fix to contracts/catalog/catalog-contract.md).
+# Distinct from the content-hash `CatalogResponse.version`: that hash moves on every
+# house-config change and is what runtime consumers watch; this constant is never served
+# at runtime. When a config change moves the committed golden, bump the PATCH level here
+# and regenerate — the STAMP.json beside the golden carries the value, and the tag is
+# cut on the same commit.
+CONTRACT_VERSION = "1.10.0"
 
 
 def _project_capability_actions(

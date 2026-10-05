@@ -205,7 +205,10 @@ its files can break.
   a config or API change alters the contract, regenerate **from the repo root**
   (device cert paths in `config/` resolve relative to it) with
   `uv run --project backend locveil-catalog --stamp contracts/catalog/STAMP.json`
-  (and `locveil-openapi` for the schema; see `contracts/catalog/README.md`).
+  (and `locveil-openapi` for the schema). A regeneration that moves a pinned
+  file is a **contract cut** — bump the contract version first, tag the landing
+  commit; the steps are in `contracts/catalog/README.md` → Regeneration, the
+  version levels in `contracts/catalog/catalog-contract.md`.
 - **`contract-guard`** (contracts/** or its vendored script changed) —
   `scripts/contract_guard.py --check`, the contract-coherence check (layout,
   stamps, pinned-copy hashes; a vendored copy of the shared Locveil
