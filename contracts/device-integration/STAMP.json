@@ -1,11 +1,11 @@
 {
   "contract": "device-integration",
-  "version": "1.1",
-  "tag": "device-integration-v1.1",
-  "date": "2026-07-18",
+  "version": "1.2.0",
+  "tag": "device-integration-v1.2.0",
+  "date": "2026-10-05",
   "owner_repo": "locveil-bridge",
   "artifacts": [
-    "contracts/device-integration/README.md",
+    "contracts/device-integration/convention.md",
     "contracts/device-integration/device-descriptor.schema.json",
     "contracts/device-integration/example.descriptor.json"
   ],

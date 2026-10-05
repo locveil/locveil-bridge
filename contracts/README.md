@@ -12,7 +12,7 @@ history lives in its own README.
 | Contract | Consumers | Version authority |
 |---|---|---|
 | [`catalog`](catalog/README.md) — the Irene ↔ bridge read contract: golden catalog + pinned OpenAPI schema + the normative guide ([`catalog-contract.md`](catalog/catalog-contract.md)) | locveil-voice (pins a copy in its own repo and the crossover copy in `locveil-commons/contracts/pins/catalog/`) | `catalog/STAMP.json` + tags `catalog-vX.Y.Z` (history: the folder README) |
-| [`device-integration`](device-integration/README.md) — how Locveil-built devices integrate with the bridge: convention doc + descriptor schema | locveil-satellite (pins the convention, authors conforming descriptors) | `device-integration/STAMP.json` + tags `device-integration-vN[.M]` (current: `device-integration-v1.1`) |
+| [`device-integration`](device-integration/README.md) — how Locveil-built devices integrate with the bridge: the normative convention ([`convention.md`](device-integration/convention.md)) + descriptor schema + example descriptor | locveil-satellite (pins the convention, authors conforming descriptors) | `device-integration/STAMP.json` + tags `device-integration-vX.Y.Z` (current: `device-integration-v1.2.0`; history: the folder README) |
 | [`docs-manifest`](docs-manifest/README.md) — **INTERNAL**: the docs manifest (`docs/manifest.json`) + the org schema copy it validates against | this repo only (no tag; repo-internal) | `docs-manifest/STAMP.json` (`docs-manifest-vN`, schema reshapes only) |
 
 Cross-reference (a consumed process contract on the **block-pin lane**, not

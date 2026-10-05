@@ -664,24 +664,6 @@ endpoint).
   satellite's first conforming descriptor (the PROD-20 chain). *(Dep line re-anchored 2026-07-14,
   DOC-16.)*
 
-- [ ] **VWB-45** `[P1]` `[release]` — **Device-integration README split — contract cut
-  `device-integration-v1.2.0`** (board **PROD-28** bridge delegation (a), second half; council
-  **HK-13** decision 5; lead VWB-44; filed at intake 2026-10-05). Same rule as VWB-44, separate
-  family, separate commit + tag. **Scope:** new enumerated
-  `contracts/device-integration/convention.md` holding the normative text (who must conform, the
-  `wb-mqtt-v1` profile, REST URL conventions, the descriptor + its test-locked example,
-  pin/conformance rules — versioning bullet re-written to the three-level rule and three-part
-  tags); `contracts/device-integration/README.md` becomes a thin UNLOCKED index + history; the
-  hand-written STAMP (`version` `"1.2.0"`, `tag`, `date`, `artifacts` = convention + schema +
-  example fixture); `test_device_integration_schema.py` (the guide-equals-fixture check re-points
-  at `convention.md`); the convention's vocabulary cross-link → the catalog guide
-  (`../catalog/catalog-contract.md`, exists after VWB-44 — so this runs second);
-  `docs/manifest.json` (new canonical node + root); registry row (current-version string →
-  `device-integration-v1.2.0`). MINOR cut (pinned set gains a file; schema + example fixture
-  byte-identical; the served `convention` value stays `1`). **Intake reconciliation: valid as
-  delegated.** Re-pin owed on completion: satellite (a FIRST pin — their DES-4, amended by PROD-28
-  to wait for this cut).
-
 ### UI — config-ui
 
 

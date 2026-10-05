@@ -7,7 +7,9 @@ design:** [`contracts/device-integration/`](../../contracts/device-integration/)
 (`README.md`), `device-descriptor.schema.json`, `STAMP.json`; tagged **`device-integration-v1`**.
 Consumers: `locveil-satellite` (pins the artifacts one-way, authors conforming descriptors —
 their DES-4), the `EspManagedDevice` driver (DRV-36), the descriptor-pin conformance test
-(VWB-39).
+(VWB-39). *(Layout note, 2026-10-05 — VWB-45, `device-integration-v1.2.0`: the normative text
+now lives in `contracts/device-integration/convention.md`, a pinned artifact; the folder
+`README.md` is an unlocked index and history, outside the pinned set.)*
 
 ## 1. Purpose — the two-layer contract
 

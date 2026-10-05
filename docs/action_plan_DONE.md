@@ -255,6 +255,40 @@ possible round-3.
   contracts: catalog-v1.10.0 cut (minor — the pinned set gained `catalog-contract.md` and lost
   the README; golden + openapi byte-identical); re-pin owed: voice, commons (voice's multi-dest
   catalog run updates both destinations — scheduled in its own PROD-28 sweep).
+- [x] **VWB-45** `[P1]` `[release]` — **DONE 2026-10-05** (filed + executed same day; board
+  **PROD-28** bridge delegation (a), second half; council **HK-13** decision 5; lead VWB-44).
+  **Device-integration README split: the normative text is now the pinned
+  `contracts/device-integration/convention.md`; deliberate MINOR cut
+  `device-integration-v1.2.0`.** Same rule as VWB-44 (an owner never enumerates a `README.md`),
+  separate family, separate commit and tag. **(a) `convention.md`** takes the whole normative
+  text — who must conform, the `wb-mqtt-v1` profile, REST URL conventions, the descriptor and its
+  test-locked example, the rules that matter — moved with four deliberate edits: the
+  versioning section rewritten to three levels and three-part tags; a new explicit statement
+  that the wire carries the MAJOR only (the descriptor's `convention` field and the
+  `meta/locveil` stamp never move on a minor or patch) and that `descriptor_version` is the
+  device's own revision; the pin bullet now says a device repo mirrors the WHOLE enumerated set
+  (the old "the schema, and this guide if it likes" contradicted the complete-pins ruling); the
+  vocabulary cross-reference points at the catalog guide `../catalog/catalog-contract.md`
+  instead of the catalog README. **(b) The README** is a thin UNLOCKED index: what the folder
+  is, a file table with a "pinned" column, version history (v1, v1.1, v1.2.0), how to cut a
+  version of this hand-stamped family, the guard. **(c) STAMP** (hand-written): `version`
+  1.1 → **"1.2.0"**, `tag`, `date`; `artifacts` = convention + schema + example fixture (README
+  out). **(d) Tests** (`test_device_integration_schema.py`, 5 → 8): the example-equals-fixture
+  check re-pointed at `convention.md`; the convention holds its five normative sections and the
+  README points at it; the stamp carries the core, a three-part version, a matching tag, and its
+  major equals the schema's `convention` const and the example's value; the pinned set has no
+  reserved or duplicate file names and every path exists. **(e) Registry:** the row names
+  `convention.md`; current-version string → `device-integration-v1.2.0`. **(f)**
+  `docs/manifest.json`: new root + canonical-reference node
+  `contract/device-integration-convention`; `contract/device-integration` stays on the README,
+  re-classed `contributor`. The design doc's "the guide (`README.md`)" line got a dated layout
+  note. Schema and example fixture BYTE-IDENTICAL; the served `convention` value stays `1`.
+  Annotated tag **`device-integration-v1.2.0`** on the landing commit (family style), pushed
+  with it. Suite **763**, pyright 0, import-linter 6/6.
+  docs: contract/device-integration-convention, contract/device-integration, contracts-registry
+  contracts: device-integration-v1.2.0 cut (minor — the pinned set gained `convention.md` and
+  lost the README; schema + example byte-identical); re-pin owed: satellite (a FIRST pin — their
+  DES-4, amended by PROD-28 to take its file set from this cut's STAMP).
 
 ## UI — config-ui
 

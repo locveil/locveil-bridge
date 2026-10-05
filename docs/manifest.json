@@ -15,6 +15,7 @@
     "contracts/catalog/README.md",
     "contracts/catalog/catalog-contract.md",
     "contracts/device-integration/README.md",
+    "contracts/device-integration/convention.md",
     "contracts/docs-manifest/README.md"
   ],
   "surfaces": {
@@ -96,7 +97,11 @@
       "canonical": { "invariant": "cross-repo-source-of-truth",
                      "stamp": "contracts/catalog/STAMP.json",
                      "guard": "backend/tests/unit/test_contracts_golden.py" } },
-    { "id": "contract/device-integration", "path": "contracts/device-integration/README.md", "class": "canonical-reference",
+    { "id": "contract/device-integration", "path": "contracts/device-integration/README.md", "class": "contributor",
+      "audience": ["integrator", "contributor"],
+      "covers": ["device-integration"], "status": "ok",
+      "note": "owner-side index: file list, version history, how to cut; outside the pinned set" },
+    { "id": "contract/device-integration-convention", "path": "contracts/device-integration/convention.md", "class": "canonical-reference",
       "audience": ["integrator"],
       "covers": ["device-integration"], "status": "ok",
       "canonical": { "invariant": "cross-repo-source-of-truth",

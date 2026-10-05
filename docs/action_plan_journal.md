@@ -28,6 +28,18 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — VWB-45 DONE: the device-integration README split,
+  `device-integration-v1.2.0`.** The second owner cut. The convention's whole normative text
+  moved into `contracts/device-integration/convention.md` (pinned); the README shrank to an
+  unlocked index with the file table, the version history and the hand-stamp cutting steps.
+  While the text moved it gained three things the three-level rule needs said out loud: tags
+  are three-part from here, the wire carries the major only (so this cut changes nothing a
+  fielded device reports — `convention` stays `1`), and a pin copies the whole enumerated set
+  (the old "this guide, if it likes" predated the complete-pins ruling). The catalog
+  cross-reference now lands on the catalog guide cut earlier the same day. Schema and example
+  fixture byte-identical. The satellite's first pin (their DES-4) can now take a clean set:
+  convention + schema + example + stamp, no README collision in its pin folder.
+
 - **2026-10-05 — VWB-44 DONE: the catalog README split, `catalog-v1.10.0`.** First of the two
   owner cuts HK-13 asks of the bridge. The normative half of the catalog README — param
   semantics and the versioning rule — moved to a new pinned guide,
