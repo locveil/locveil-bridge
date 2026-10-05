@@ -28,6 +28,15 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-05 — OPS-43 DONE: the Workbench plugin's nine toolchain alerts closed.** The same
+  recipe as the UI an hour earlier, on a smaller tree: postcss, js-yaml, brace-expansion,
+  browserslist and its browser-data mapping, plus the codegen parser that pins js-yaml. npm
+  also corrected two version strings the lock had been carrying one patch behind — its own and
+  the linked commons contract package's. The built manifest still equals its validated source.
+  With this the three lockfiles are done: 52 alerts closed, two react-router ones open by
+  decision. A side observation for later: the plugin's committed API types are one
+  doc-comment behind the backend schema.
+
 - **2026-10-05 — OPS-42 DONE: 34 of the UI's 36 alerts closed; the react-router pair stays
   open with a reachability note.** axios (the twelve-alert cluster) and react-router-dom moved
   in the runtime bundle; the rest was toolchain. No overrides were needed, but one package had

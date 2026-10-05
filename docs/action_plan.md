@@ -850,17 +850,6 @@ endpoint).
   PROD-8 council; graduation to core-py only on a genuine second consumer of the metadata
   mechanism — a board topic if ever wanted).
 
-- [ ] **OPS-43** `[P2]` `[release]` — **`workbench-plugin/` lockfile security refresh — the 9
-  open Dependabot alerts on `workbench-plugin/package-lock.json`** (filed 2026-10-05, same
-  intake as OPS-41). All dev-only toolchain: `postcss` 8.5.19 (needs ≥ 8.5.23), `js-yaml`
-  4.2.0/4.3.0 (≥ 4.3.2), `brace-expansion` 1.1.16 / 2.1.2 / 5.0.7 (≥ 1.1.21 / 2.1.7 / 5.0.12),
-  `browserslist` 4.28.6 (≥ 4.28.7), `baseline-browser-mapping` 2.10.43 (≥ 2.11.0). **Scope:**
-  same rules as OPS-42 — targeted `npm update`, `overrides` only when unavoidable, no unrelated
-  bumps; the commons `file:` links stay as they are. **Guard rail:** the emitted
-  `dist/manifest.json` must still equal `manifest.fragment.json` + the package version (the
-  CI job's closing check). **DoD:** typecheck + lint + build green, `npm audit` 0, the 9 alerts
-  closed on the post-push scan.
-
 ### CORE — Backend core / architecture
 
 - [ ] **CORE-4** `[P2]` `[deferred]` — **Full `POST /devices/{id}/action` demotion (release-2 candidate).** Decided at the release-1 sign-off (2026-07-06): `/action` ships in release 1 **as the documented internal/dev + UI-fallback door, untouched** — UI-9 removed its last first-party writer, but demoting it before the canonical hardware passes (REL-3, VWB-13) prove coverage would remove the safety net exactly when it might be needed. Post-release scope: strip the UI's un-annotated-control fallback dispatch paths, mark the endpoint internal in the OpenAPI docs (or move it under an internal prefix), and re-examine `/scenario/switch`+`/scenario/shutdown` internalization (the rest of `canonical_first.md` §8 phase 3) in the same pass.

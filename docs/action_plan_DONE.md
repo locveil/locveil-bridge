@@ -804,6 +804,34 @@ possible round-3.
   carries majors, none moved).
   contracts: none — no contract artifact, pin or vendored tool touched; generated API types
   byte-identical.
+- [x] **OPS-43** `[P2]` `[release]` — **DONE 2026-10-05** (filed + executed same day at the
+  Dependabot intake, owner request; siblings OPS-41 / OPS-42). **`workbench-plugin/` lockfile
+  security refresh — all 9 open Dependabot alerts on `workbench-plugin/package-lock.json`.**
+  Intake matched the lock (classification: valid); everything here is dev toolchain — the
+  plugin's emitted bundle carries none of it. Targeted `npm update <pkg>`, no `--force`, **no
+  `overrides`**: `postcss` 8.5.19 → **8.5.29** (floor `^8.4.31` → `^8.5.23`, the one
+  `package.json` edit; `nanoid` 3.3.16 → 3.3.20 and `source-map-js` 1.2.1 → 1.2.2 ride as its
+  deps), `js-yaml` 4.2.0/4.3.0 → **4.3.2** (one copy), `brace-expansion` 1.1.16 → **1.1.21**,
+  2.1.2 → **2.1.7**, 5.0.7 → **5.0.12**, `browserslist` 4.28.6 → **4.29.3** (with its data
+  closure `caniuse-lite` / `electron-to-chromium` / `node-releases` /
+  `update-browserslist-db`), `baseline-browser-mapping` 2.10.43 → **2.11.27**. Same enabling
+  bump as OPS-42: `@redocly/openapi-core` 1.34.17 → **1.34.20** (exact-pins `js-yaml`).
+  **Two bookkeeping lines npm rewrote while it had the lock open, both true:** the lock's own
+  root version 0.1.0 → 0.1.1 (it had trailed `package.json` since the plugin's version bump)
+  and the recorded version of the `file:`-linked commons `workbench` package 0.1.0 → 0.1.1
+  (what commons' default branch carries). The commons links themselves are untouched.
+  **Guard rail held:** emitted `dist/manifest.json` equals `manifest.fragment.json` + the
+  package version. **Verification:** clean `npm ci`, `npm run check` (typecheck + ESLint),
+  `npm run build` green; `npm audit` leaves one root, `braces` ≤ 3.0.3 (GHSA-vfj7-8cjw-p6xm,
+  via tailwind 3) — no patched release exists, not a Dependabot alert, same as in `ui/` — so
+  the filing's "`npm audit` 0" is met for everything that has a fix. **Seen, not changed:**
+  the committed `src/types/openapi.gen.ts` trails `backend/openapi.json` by one doc-comment
+  (the canonical endpoint's error-mapping description reworded at catalog v1.9); the toolchain
+  bump does not cause it (the regenerated file equals `ui/`'s, which is byte-stable across
+  this refresh) and CI regenerates before it typechecks — left for its own change.
+  docs: none — dev-toolchain versions only; no manifest node names them.
+  contracts: none — no contract artifact, pin or vendored tool touched; the plugin manifest
+  source and the pinned workbench schema are unchanged.
 
 ## CORE — Backend core / architecture
 
