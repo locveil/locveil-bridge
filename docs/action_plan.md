@@ -816,22 +816,6 @@ endpoint).
 
 - [ ] **OPS-19** `[P2]` `[deferred]` — **`pyatv` git source is unmirrored — a dependency-policy Rule 2 compliance gap (policy home since DOC-15: `CONTRIBUTING.md` → Dependency policy; ex-ADR 0006, archived).** Surfaced by the REL-4 ADR review. `pyatv` is pinned to `git+https://github.com/postlund/pyatv@9177803…` — SHA-pinned (immutable, so the build is reproducible today) but **not** mirrored under the owner's account, which the policy's Rule 2 requires for repos the owner doesn't control; the old ADR's "only remaining git source" claim was already annotated false 2026-07-10. Residual risk: an upstream force-push/deletion of `postlund/pyatv` breaks recovery. **Decision + small op:** either mirror `postlund/pyatv` → `droman42/pyatv` and repoint the pin (comply), OR record an accepted exception in the CONTRIBUTING dependency-policy section with rationale. Not a release gate (reproducible now). Minor sibling: the dev-only `py-dev-gates@v0.1.1` is tag-pinned (owner-controlled) — fold in or leave.
 
-- [ ] **OPS-28** `[P2]` `[deferred]` — **PROD-19 twin: public-issue intake posture — one door,
-  locveil-reports** (filed at PROD-19 intake 2026-07-14; the board's HK-7 finding was that voice
-  BUILD-14's "the bridge repo has the same question" claim had no bridge task behind it — this is
-  that task). **Reconciled bridge reality (lighter than voice's):** the bridge carries NO pre-board
-  intake machinery — no `.github/ISSUE_TEMPLATE/`, no triage workflow (`.github/workflows/` =
-  `build-arm.yml` only), no docs pointing users at GitHub issues, zero issues ever filed — but the
-  public repo's **Issues tab is enabled bare**: an unwatched side door, and (locveil-reports being
-  private) the only intake channel a public visitor can see. **Scope:** decide the posture WITH
-  voice BUILD-14 (one decision, two repos): (a) a forwarding workflow mirroring public issues into
-  the reports-repo triage (leak fence: public→private mirroring is safe in that direction only) ·
-  (b) lightweight issue templates that redirect, no automation · (c) disable the Issues tab. Apply
-  the bridge side; any reports-repo workflow change is committed there (`cross-repo-source-of-truth`).
-  Docs at execution: neither the README nor `docs/design/problem_reports_bridge.md` says anything
-  about public intake today — record the chosen posture wherever it lands. Refs: board PROD-19,
-  voice BUILD-14, `docs/design/problem_reports_bridge.md`.
-
 - [ ] **OPS-35** `[P2]` `[deferred]` — **Per-driver dependency extras + profile-driven slim
   images** (CORE-7 follow-up, filed off the 2026-07-18 findings analysis; pairs with CORE-13 and
   is GATED on its activation + failure policy — a slim image without loud missing-driver failure

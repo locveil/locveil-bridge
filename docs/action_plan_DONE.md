@@ -562,6 +562,19 @@ possible round-3.
   second instance of the exact class PROD-22 was filed about; tag created at `3592282` (the
   commit that landed the STAMP), check now green, 0 warnings. docs: none — vendored tool only;
   CONTRIBUTING's contract-guard text is version-agnostic.
+- [x] **OPS-28** `[P2]` `[deferred]` — **DONE 2026-10-06 (executed under board PROD-19, owner
+  directive: "Disable the Issues tabs on all four repos and execute PROD-19") — public-issue intake
+  posture: one door, locveil-reports; no public issue tracker.** Reconciled at start: unchanged
+  since filing — no intake machinery here, Issues tab enabled bare, zero issues ever filed. Of the
+  three postures the entry offered the owner chose (c): the Issues tab is DISABLED (repository
+  setting, applied by the coordinator session for bridge, voice, satellite and commons; the private
+  reports repo keeps its Issues). Nothing to remove in this repo; recorded where the entry asked:
+  `docs/design/problem_reports_bridge.md` gains decision B-12 (the posture, and that a public
+  visitor has no filing path by design), and `backend/pyproject.toml` loses its `Issues` project
+  URL, which pointed at the now-disabled tab. The README already routes users to the report button
+  (`docs/guides/report-a-problem.md`) and says nothing about GitHub issues — unchanged. Voice twin:
+  BUILD-14 (done the same day). docs: none — no manifest node describes public intake; the user
+  path (report button) is unchanged and already documented. contracts: none — no surface moved.
 - [x] **OPS-29** `[P2]` — **DONE 2026-07-15.** **Forensic logging middle ground: the load-bearing eMotiva transitions survive INFO** (wedge #3 finding 5 — OPS-25's hygiene blinded the `source → arc` claim and the power transitions at the 2026-07-14 incident). Driver-side: `_handle_property_change` logs **device-reported transitions** of `power` / `zone2_power` / `input_source` at INFO (`"{name}: {field} old -> new (device-reported)"`) — only on actual value change, so it's a handful of lines per scenario switch; keepAlive stays fully silent and non-forensic properties (volume etc.) gain nothing. The ARC grab — the readiness gate's trigger condition — is now visible in a production log. Ops-side: `ops/INSTALL.md` gains the **"Full protocol forensics"** section — the deliberate temporary flip-on (runtime `system.json`: root `DEBUG` + unpin `pymotivaxmc2` from the loggers map, restart, reproduce, **revert**; ~20 MB/day, and `update.sh` re-syncs the repo copy over the edits anyway). Test: caplog — source/power transitions INFO-visible, same-value non-transitions quiet, keepAlive silent at INFO, volume gains no INFO line. Suite 728, pyright 0, import-linter 6/6. docs: install (the forensics section; the manifest has no dedicated logging node — verified).
 - [x] **OPS-30** `[P2]` — **DONE 2026-07-15** (filed + executed same day; surfaced by the first
   post-OPS-27 `workflow_dispatch`). **Contract-guard CI job gets tags: `fetch-tags: true` on its

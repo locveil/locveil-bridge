@@ -81,6 +81,15 @@ evidence infrastructure v1 builds.
   accent — "attention, not alarm"), tooltip «Сообщить о проблеме». No permanent accent (a
   standing amber icon would read like an active alert) and no text label (navbar width).
 
+- **B-12 — Public intake posture: one door, no public issue tracker (PROD-19 / OPS-28,
+  owner decision 2026-10-06).** The public repo's GitHub Issues tab is DISABLED — it was an
+  unwatched side door (zero issues ever filed) and, locveil-reports being private, the only
+  intake channel a visitor could see. Every problem report, from a user or from a developer,
+  enters through the report button (§3) into locveil-reports; a public visitor has no filing
+  path by design. The same posture holds for voice (its pre-ARCH-30 issue triage is retired,
+  BUILD-14), satellite and commons; the private reports repo keeps its Issues — it IS the
+  door. `pyproject.toml` carries no `Issues` URL.
+
 ## 2. The dialog (UI side)
 
 The "Report a problem" affordance — the B-12 navbar bug button (`BugReport` icon, far right,

@@ -84,7 +84,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/locveil/locveil-bridge"
-Issues = "https://github.com/locveil/locveil-bridge/issues"
+# No public issue tracker (PROD-19 / OPS-28, 2026-10-06): problem reports come in through the
+# UI's report button into the private locveil-reports intake; the Issues tab is disabled.
 
 [project.scripts]
 locveil-bridge = "locveil_bridge.app.main:main"

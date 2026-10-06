@@ -28,6 +28,12 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — OPS-28 DONE: the side door is closed.** PROD-19 asked one question of two
+  repos — what to do about public GitHub issues now that the reports pipeline is the intake —
+  and the owner answered it for all four public repos at once: disable the tab. Bridge had
+  nothing to retire, only a bare tab nobody watched and a `pyproject` URL pointing at it; the
+  design doc records the posture as B-12. contracts: none. docs: none.
+
 - **2026-10-05 — UI-23 DONE: the Workbench plugin compiles against the pin.** UI-22 pinned the
   plugin contract this morning and said plainly what it had not done: `tsc` still followed a
   `file:` link into the commons checkout, so the pin recorded what was verified without being
