@@ -346,6 +346,53 @@ possible round-3.
   lost the README; schema + example byte-identical); re-pin owed: satellite (a FIRST pin — their
   DES-4, amended by PROD-28 to take its file set from this cut's STAMP).
 
+- [x] **VWB-46** `[P1]` `[release]` — **DONE 2026-10-06** (filed at the PROD-18 intake and
+  executed the same day on the coordinator's rulings; board **PROD-18** rounds 1 + 2; designs
+  [`docs/design/language_data_convention.md`](design/language_data_convention.md) (VWB-33) +
+  [`docs/design/confirmation_timing.md`](design/confirmation_timing.md) (VWB-34)). **Catalog
+  `catalog-v1.11.0` — the PROD-18 round-1 cut: localization floor + guard, by-value labels,
+  louver labels, `confirm_timeout_ms`, `max_duration_ms`; ONE minor cut, ONE voice re-pin.**
+  **(1) Label slot:** `CapabilityAction.labels: Optional[LocalizedName]` (read only as a
+  by-value select's value); the synthesized `set(value)` table projects it. The nine gaps
+  closed in `mf_amplifier.json` (CD · AUX 2 · USB · фоно/phono · тюнер/tuner · AUX 1 ·
+  балансный/balanced) + `upscaler.json` (видео/video · S-VHS). **(2) Louvers:**
+  `MitsubishiHvac.json` `vane` «жалюзи» → «заслонка», `widevane` → «заслонка по
+  горизонтали»; en/de untouched; the rollers keep «жалюзи». **(3) Guard** — eleven
+  `test_contract_v111_*` tests over the committed golden: names floor, field-label floor,
+  every value labelled except the `power` field's on/off pair (78 exempt), ru field labels
+  disjoint from aliases, aliases ru-first, units are symbols, confirm_timeout == the gate
+  (device by device against the resolved maps), scenario values carry a ceiling and the two
+  tables agree, by-value selects labelled, louver strings, + the guide-sections test grew
+  `## Localization` / `## Timing`. Both §5.4/§5.5 tests passed on real data unchanged — neither
+  struck. **(4) Tier 1:** `CatalogCapability.confirm_timeout_ms` = `gate.poll_timeout_ms`
+  iff set (the endpoint's own test) — 27 capabilities published (3 HVACs × 6 at 15 000; TV
+  power 8 000 / input 3 000 × 2; Apple TV power 5 000 × 2; streamer power 25 000 / input
+  3 000; processor input 3 000). **(5) Tier 2:** `CatalogValueLabel.max_duration_ms` on the
+  scenario manager's 9 values + `none`, derived — never typed — by `scenario_ceiling_ms` /
+  `deactivate_ceiling_ms` (`domain/scenarios/reconciler.py`): the real planners over
+  state-override stand-ins (COLD: every attribute `None`; HOT: equals anything), `plan_ceiling_ms`
+  = the one formula (the force-reconcile preview's `_eta_ms` now delegates to it); exposed via
+  `ScenarioProxy.max_duration_ms` / `deactivate_ceiling_ms`. Published: movie_appletv 60 500 ·
+  movie_ld 55 500 · movie_vhs 55 500 · movie_zappiti 61 500 · music_auralic 54 500 · music_reel /
+  tape / turntable 29 500 · tv_on_speakers 55 500 · `none` 29 000 — exactly the design's table.
+  Rulings applied: teardown + activation IS the ceiling; the eMotiva DRV-39 hold is absorbed by
+  the consumer's margin (treatment (b) rejected, recorded in the design). Four reconciler
+  tests pin the derivation on a fixture topology. **Found while cutting:** the offline builder
+  never loaded the topology (`initialize()` does, `load_scenarios()` does not) — every
+  scenario resolved to an empty path and the first regeneration emitted 25–33 s; fixed in
+  `cli/dump_catalog.py` (`load_topology`), the runtime path was already right. **(6) Guide:**
+  the two sections inserted VERBATIM from the designs. **(7) Cut:** `CONTRACT_VERSION`
+  "1.11.0"; golden regenerated (hash `5622ba7a1a78102a` → `4deb84ae88da6caa`: 27 capabilities
+  + 19 values gained a number, 9 values gained labels, 6 labels changed); `openapi.json` +
+  `backend/openapi.json` (two optional fields); STAMP three-part, `artifacts` set unchanged;
+  README history entry; the registry row is version-agnostic by rule (no edit). **(8) UI:**
+  `ui` + `workbench-plugin` types regenerated, `check` + `build` clean, no component change.
+  Side filing: **VWB-48** (zone-form `power` absent from the catalog). CORE-12's reserved
+  version re-pointed to `catalog-v1.13.0`. Suite **793**, pyright 0, import-linter 6/6.
+  docs: contract/catalog-guide, contract/catalog, howto/new-device (the authoring checklist
+  from the VWB-33 design, verbatim); diagrams: none affected.
+  contracts: catalog-v1.11.0 cut (minor — localization floor + guard, by-value labels, louver
+  labels, confirm_timeout_ms, max_duration_ms); re-pin owed: voice (both copies), commons.
 ## UI — config-ui
 
 - [x] **UI-1** — **DONE** 2026-05-19 — backend `ab5402d`, UI `8ab2cfa`. On survey, the 8 modified UI files turned out to be one coherent appliance-category feature (not an unrelated layout refresh as initially thought) plus two unrelated SSE console-log cleanups; `docs/appliances.md` was the matching design doc. Shipped as a single paired commit per repo. `config/system.json` (UI) left untracked pending later check; `data/` added to UI `.gitignore`.

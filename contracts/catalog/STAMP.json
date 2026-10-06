@@ -1,15 +1,15 @@
 {
   "contract": "catalog",
-  "version": "1.10.0",
-  "tag": "catalog-v1.10.0",
-  "date": "2026-10-05",
+  "version": "1.11.0",
+  "tag": "catalog-v1.11.0",
+  "date": "2026-10-06",
   "owner_repo": "locveil-bridge",
   "artifacts": [
     "contracts/catalog/catalog.golden.json",
     "contracts/catalog/openapi.json",
     "contracts/catalog/catalog-contract.md"
   ],
-  "bridge_commit": "1867be3014a8126525fcae09234e5d62b125c849",
+  "bridge_commit": "8b4355845130703c8d32b1438780dcef2f6a5851",
   "bridge_version": "0.6.0",
-  "catalog_version": "5622ba7a1a78102a"
+  "catalog_version": "4deb84ae88da6caa"
 }

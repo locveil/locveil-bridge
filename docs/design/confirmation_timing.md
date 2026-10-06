@@ -229,7 +229,8 @@ processor z1 6000 + z2 6000). Per-device power-off gates: appletv 5000, ld 1000,
 
 The council's "~30 s for the cold movie scenario" was the activation half; the switch a
 consumer actually requests can also pay for the outgoing scenario, which is why the published
-number carries both.
+number carries both. **Ruled 2026-10-06: teardown + activation IS the published ceiling — it is what
+"from any state of its room" means.** The table above is what `catalog-v1.11.0` emits.
 
 ### 4.5 What the sum does not see — recorded for the owner (not decided here)
 
@@ -259,7 +260,10 @@ honest treatments, for the owner to choose at the cut (VWB-46 carries the questi
   ceiling) because the real cap is shared across steps. A per-step exact rule would couple the
   derivation to the driver's exemption logic; not proposed.
 
-This design recommends **(a)** and words the guide accordingly; it does not decide.
+This design recommends **(a)** and words the guide accordingly. **Ruled 2026-10-06 (PROD-18
+coordinator, at the VWB-46 intake): (a) — publish the plan sum, the guide worded as the
+bridge's own waiting; (b) REJECTED** (it over-counts, and voice's margin absorbs the hold).
+Implemented as such in `catalog-v1.11.0`: `plan_ceiling_ms` counts pre-delays + gates only.
 
 ## 5. The guide section — verbatim text for `catalog-contract.md`
 

@@ -270,6 +270,13 @@ class CatalogValueLabel(BaseModel):
     wire: str
     canonical: str
     labels: Optional[Dict[str, str]] = None
+    max_duration_ms: Optional[int] = Field(
+        default=None,
+        description="Scenario values only: the ceiling, in milliseconds, for activating this "
+                    "scenario from any state of its room (the full sequential switch chain, "
+                    "worst case). On the `none` entry: the ceiling for deactivating the room. "
+                    "Absent on every other value table.",
+    )
 
 
 # CatalogParam forward-references CatalogValueLabel (defined above it in contract order,
@@ -297,6 +304,12 @@ class CatalogCapability(BaseModel):
     name: str
     actions: Optional[List[CatalogAction]] = None
     fields: Optional[List[CatalogField]] = None
+    confirm_timeout_ms: Optional[int] = Field(
+        default=None,
+        description="Longest the bridge waits for this capability's device to confirm an "
+                    "action before reporting failure, in milliseconds. Absent = the default "
+                    "500 ms echo window.",
+    )
     group: Optional[str] = Field(
         default=None,
         description="Effective semantic group for room-scoped addressing — "

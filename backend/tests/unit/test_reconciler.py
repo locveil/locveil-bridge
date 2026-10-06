@@ -901,3 +901,106 @@ async def test_dispatch_timeout_fails_the_step_and_the_plan_continues(monkeypatc
     failed_action, err = result.failures[0]
     assert failed_action.device_id == "hung" and "dispatch timeout" in err
     assert [a.device_id for a in result.executed] == ["healthy"]
+
+
+# --- VWB-46: timing ceilings — the catalog's `max_duration_ms` derivation ----------
+# (confirmation_timing.md §4.3). A fixture topology, not the house: two scenarios
+# sharing a sink, one exclusive slow feedback device, one ordering delay. Pins that the
+# COLD override emits every action, the HOT override every power-off, and that the
+# published number is worst graceful teardown + cold activation.
+
+from locveil_bridge.domain.scenarios.reconciler import (  # noqa: E402
+    cold_activation_plan,
+    deactivate_ceiling_ms,
+    hot_teardown_plan,
+    plan_ceiling_ms,
+    scenario_ceiling_ms,
+)
+
+
+def _fixture_device(cap_json: dict, **state):
+    caps = CapabilityMap.model_validate(cap_json)
+    st = SimpleNamespace(**state)
+    return SimpleNamespace(capabilities=caps, get_current_state=lambda s=st: s)
+
+
+def _timing_world():
+    power_feedback = lambda ms: {  # noqa: E731
+        "kind": "stateful", "feedback": True, "state_field": "power",
+        "actions": {"on": {"command": "power_on"}, "off": {"command": "power_off"}},
+        "gate": {"poll_timeout_ms": ms},
+    }
+    sink_caps = {
+        "power": power_feedback(8000),
+        "input": {
+            "kind": "stateful", "feedback": True, "state_field": "input",
+            "select": {"command": "set_input", "param_map": {"input": "input"}},
+            "gate": {"poll_timeout_ms": 3000},
+        },
+    }
+    slow_caps = {"power": power_feedback(25000)}          # the exclusive slow source
+    ir_caps = {"power": {                                   # a no-feedback IR source
+        "kind": "stateful", "feedback": False, "state_field": "power",
+        "actions": {"on": {"command": "power"}, "off": {"command": "power"}},
+        "gate": {"delay_ms": 1000},
+    }}
+    devices = {
+        "tv": _fixture_device(sink_caps, power="on", input="hdmi1"),   # WARM: already on
+        "slow": _fixture_device(slow_caps, power="on"),
+        "ir": _fixture_device(ir_caps, power="off"),
+    }
+    topology = Topology.model_validate({
+        "nodes": {},
+        "links": [
+            {"from": "slow:out", "to": "tv:hdmi1", "carries": ["video"]},
+            {"from": "ir:out", "to": "tv:hdmi2", "carries": ["video"]},
+        ],
+        "ordering": [{"first": "ir.power", "then": "tv.input", "delay_ms": 4500}],
+    })
+    s_slow = ScenarioDefinition(scenario_id="s_slow", names={"ru": "а", "en": "a"},
+                                room_id="r", source="slow", display="tv")
+    s_ir = ScenarioDefinition(scenario_id="s_ir", names={"ru": "б", "en": "b"},
+                              room_id="r", source="ir", display="tv")
+    return devices, topology, [s_slow, s_ir]
+
+
+def test_cold_override_emits_every_action_regardless_of_belief():
+    devices, topology, (s_slow, s_ir) = _timing_world()
+    # the warm planner skips the TV (believed on, on hdmi1) …
+    warm = build_plan(s_slow, topology, devices)
+    assert [(a.device_id, a.domain) for a in warm.actions] == []
+    # … the COLD override plans everything, in `_order`'s order
+    cold = cold_activation_plan(s_slow, topology, devices)
+    assert [(a.device_id, a.domain) for a in cold.actions] == [
+        ("slow", "power"), ("tv", "power"), ("tv", "input"),
+    ]
+    assert plan_ceiling_ms(cold.actions) == 25000 + 8000 + 3000
+
+
+def test_hot_override_emits_every_power_off():
+    devices, _topology, _ = _timing_world()
+    plan = hot_teardown_plan(["ir", "slow", "tv"], devices)   # ir is believed OFF
+    assert sorted(a.device_id for a in plan.actions) == ["ir", "slow", "tv"]
+    assert plan_ceiling_ms(plan.actions) == 1000 + 25000 + 8000
+
+
+def test_scenario_ceiling_is_worst_teardown_plus_cold_activation():
+    devices, topology, defs = _timing_world()
+    s_slow, s_ir = defs
+    # s_ir: teardown = the slow source (exclusive to s_slow) 25 s;
+    #       activation = ir power 1 s + tv power 8 s + tv input (4.5 s edge delay + 3 s)
+    assert scenario_ceiling_ms(s_ir, defs, topology, devices) == 25000 + (1000 + 8000 + 4500 + 3000)
+    # s_slow: teardown = the IR source 1 s; activation = 25 s + 8 s + 3 s
+    assert scenario_ceiling_ms(s_slow, defs, topology, devices) == 1000 + (25000 + 8000 + 3000)
+    # none: the slowest full power-down of any scenario (s_slow: slow 25 s + tv 8 s)
+    assert deactivate_ceiling_ms(defs, topology, devices) == 25000 + 8000
+
+
+def test_plan_ceiling_counts_pre_delays_and_gates_only():
+    actions = [
+        PlannedAction("a", "power", "on", "p", feedback=True, poll_timeout_ms=5000, delay_ms=999),
+        PlannedAction("b", "power", "on", "p", feedback=False, poll_timeout_ms=5000, delay_ms=700),
+        PlannedAction("c", "input", "x", "i", feedback=True, poll_timeout_ms=None, delay_ms=300,
+                      pre_delay_ms=4000),
+    ]
+    assert plan_ceiling_ms(actions) == 5000 + 700 + (4000 + 300)

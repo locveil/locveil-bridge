@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from locveil_bridge.domain.scenarios.models import ScenarioDefinition
+from locveil_bridge.domain.scenarios.reconciler import plan_ceiling_ms
 from locveil_bridge.domain.scenarios.scenario import ScenarioError, ScenarioExecutionError
 from locveil_bridge.domain.scenarios.service import ScenarioManager
 from locveil_bridge.domain.rooms.service import RoomManager
@@ -188,13 +189,9 @@ def _plan_step(action: Any) -> ReconcilePlanStep:
 
 
 def _eta_ms(actions: List[Any]) -> int:
-    """Worst-case wall clock for a forced chain: pre-delays + per-action gate
-    (feedback devices may poll up to poll_timeout_ms; no-feedback wait delay_ms)."""
-    total = 0
-    for a in actions:
-        total += a.pre_delay_ms
-        total += a.poll_timeout_ms if (a.feedback and a.poll_timeout_ms) else a.delay_ms
-    return total
+    """Worst-case wall clock for a forced chain — the domain's one ceiling formula
+    (shared with the catalog's scenario `max_duration_ms`, VWB-46)."""
+    return plan_ceiling_ms(actions)
 
 
 @router.get("/scenario/{id}/reconcile_preview", response_model=ReconcilePreviewResponse)

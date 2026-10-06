@@ -227,7 +227,7 @@
         "name": "vane",
         "type": "enum",
         "labels": {
-          "ru": "жалюзи",
+          "ru": "заслонка",
           "en": "vane",
           "de": "Lamelle"
         },
@@ -320,7 +320,7 @@
         "name": "widevane",
         "type": "enum",
         "labels": {
-          "ru": "горизонтальные жалюзи",
+          "ru": "заслонка по горизонтали",
           "en": "wide vane",
           "de": "Horizontallamelle"
         },

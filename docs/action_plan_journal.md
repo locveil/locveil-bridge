@@ -28,6 +28,16 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — VWB-46 DONE: `catalog-v1.11.0` is cut.** Everything the two designs drafted
+  went in as drafted — the slot, the nine words, the louver rename, the two guide sections
+  verbatim, the two optional fields — and the guard tests passed on real data without a
+  single exemption beyond the one decided. The cut found one bug of its own: the offline
+  catalog builder had never loaded the signal topology, so the first regeneration priced
+  every movie scenario at the cost of its one source device; with the topology loaded the
+  golden emits exactly the table the design computed, 29.5 s to 61.5 s. One pre-existing gap
+  surfaced by the tier-1 table was filed on its own rather than folded in: the eMotiva's
+  zone-form power never reached the catalog. Voice and commons owe a re-pin.
+
 - **2026-10-06 — VWB-34 DONE: the two timing numbers are designed, and computed.** Tier 1 is a
   one-line rule — publish the gate's poll timeout under a consumer-facing name, present only
   where it exists — and its table is twenty-seven capabilities, mostly the three air

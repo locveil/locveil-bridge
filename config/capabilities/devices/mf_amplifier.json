@@ -20,25 +20,32 @@
     "select": {
       "by_value": {
         "cd": {
-          "command": "input_cd"
+          "command": "input_cd",
+          "labels": { "ru": "CD", "en": "CD" }
         },
         "aux2": {
-          "command": "input_aux2"
+          "command": "input_aux2",
+          "labels": { "ru": "AUX 2", "en": "AUX 2" }
         },
         "usb": {
-          "command": "input_usb"
+          "command": "input_usb",
+          "labels": { "ru": "USB", "en": "USB" }
         },
         "phono": {
-          "command": "input_phono"
+          "command": "input_phono",
+          "labels": { "ru": "фоно", "en": "phono" }
         },
         "tuner": {
-          "command": "input_tuner"
+          "command": "input_tuner",
+          "labels": { "ru": "тюнер", "en": "tuner" }
         },
         "aux1": {
-          "command": "input_aux1"
+          "command": "input_aux1",
+          "labels": { "ru": "AUX 1", "en": "AUX 1" }
         },
         "balanced": {
-          "command": "input_balanced"
+          "command": "input_balanced",
+          "labels": { "ru": "балансный", "en": "balanced" }
         }
       }
     },

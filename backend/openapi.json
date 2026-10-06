@@ -911,6 +911,18 @@
             ],
             "title": "Actions"
           },
+          "confirm_timeout_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Longest the bridge waits for this capability's device to confirm an action before reporting failure, in milliseconds. Absent = the default 500 ms echo window.",
+            "title": "Confirm Timeout Ms"
+          },
           "fields": {
             "anyOf": [
               {
@@ -1288,6 +1300,18 @@
               }
             ],
             "title": "Labels"
+          },
+          "max_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scenario values only: the ceiling, in milliseconds, for activating this scenario from any state of its room (the full sequential switch chain, worst case). On the `none` entry: the ceiling for deactivating the room. Absent on every other value table.",
+            "title": "Max Duration Ms"
           },
           "wire": {
             "title": "Wire",

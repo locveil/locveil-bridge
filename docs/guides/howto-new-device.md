@@ -35,6 +35,27 @@ with a native library](howto-new-driver.md)** instead.
 3. **Which room** — must match a `room_id` in `config/rooms.json`
    (see [Architecture: rooms](../architecture/rooms.md)).
 
+## Words the voice assistant will use
+
+The catalog carries the *nouns* for your device; the voice assistant brings the verbs. Before
+you commit, check:
+
+- **`names`** — Russian and English are required; add German if you have it. The assistant
+  falls back to Russian for a locale you leave out.
+- **`aliases`** — optional, but the single best thing you can do for voice. Write the words
+  people in the house actually say, Russian first (`"aliases": {"ru": ["люстра", "большой
+  свет"]}`). Don't reuse a word that is already a field label somewhere — «жалюзи» belongs
+  to the cabinet rollers, so the air conditioner's louver is «заслонка».
+- **Field labels and value labels** — if your capability map (or profile) declares a field,
+  it needs `labels` in Russian and English; every entry of an enum value table needs them
+  too. The only exception is the plain `on`/`off` of a `power` field. A selection input with
+  one command per option (`by_value`) labels each option in place.
+- **`unit`** is a symbol (`°C`, `%`, `dB`), **`description`** is a short English note for
+  developers — neither is spoken, neither is translated.
+
+The contract tests check all of this on the committed catalog, so a missing label fails the
+build with the exact device, field and value named.
+
 ## Worked example — a WB relay light
 
 File: `config/devices/wb-devices/cabinet/cabinet_spots.json`. The

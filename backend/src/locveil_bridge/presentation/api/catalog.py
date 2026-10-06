@@ -49,7 +49,13 @@ from locveil_bridge.presentation.api.schemas import (
 # at runtime. When a config change moves the committed golden, bump the PATCH level here
 # and regenerate — the STAMP.json beside the golden carries the value, and the tag is
 # cut on the same commit.
-CONTRACT_VERSION = "1.10.0"
+CONTRACT_VERSION = "1.11.0"
+
+
+def _by_value_labels(act: Optional[Any]) -> Optional[dict]:
+    """The labels a by-value select option carries (VWB-46), or None."""
+    labels = getattr(act, "labels", None)
+    return labels.model_dump() if labels is not None else None
 
 
 def _project_capability_actions(
@@ -125,13 +131,23 @@ def _project_capability_actions(
         # `options_from` dance (`GET /devices/{id}/options/*`).
         if cap.select is not None and not any(a.name == "set" for a in actions):
             static = cap.select.option_values()
+            # VWB-46: a by-value option carries its own labels (the Localization rule —
+            # every value of a `set(value)` table is labelled); the slot is the value's
+            # CapabilityAction.labels, authored in place beside its command.
+            by_value = cap.select.by_value or {}
             actions.append(CatalogAction(name="set", params=[CatalogParam(
                 name="value",
                 type="string",
                 required=True,
                 description="Target option (canonical value).",
                 values=(
-                    [CatalogValueLabel(wire=v, canonical=v) for v in static]
+                    [
+                        CatalogValueLabel(
+                            wire=v, canonical=v,
+                            labels=_by_value_labels(by_value.get(v)),
+                        )
+                        for v in static
+                    ]
                     if static is not None else None
                 ),
                 options_from=dynamic_kind if static is None else None,
@@ -168,6 +184,11 @@ def _project_capability_actions(
             name=cap_name,
             actions=actions if actions else None,
             fields=fields if fields else None,
+            # VWB-46 (tier 1): the confirmation window the canonical endpoint actually
+            # waits (DRV-29 — `gate.poll_timeout_ms` when set, else 500 ms). The SAME
+            # truthiness test as the endpoint, so the published number and the window
+            # can never disagree; `delay_ms` paces the reconciler and is not published.
+            confirm_timeout_ms=cap.gate.poll_timeout_ms if cap.gate.poll_timeout_ms else None,
             # VWB-23 (§10): always-explicit effective group so consumers never
             # reimplement the defaulting rule; null = opted out of group addressing.
             group=cap.effective_group(cap_name),
@@ -261,10 +282,14 @@ def _project_scenario_managers(scenario_proxy: Any) -> list[CatalogDevice]:
         defs = scenario_proxy.room_scenarios(room_id)
         # Localized labels (VWB-20/G3): scenario `names` (ru/en + extras, required since
         # SCN-8) is the voice surface — «включи кино» needs a Russian label.
+        # VWB-46 (tier 2): `max_duration_ms` per value — the ceiling for activating the
+        # scenario from ANY state of the room (worst graceful teardown + cold activation,
+        # derived by the planners over state overrides; confirmation_timing.md §4.3).
         value_table = [
             CatalogValueLabel(
                 wire=d.scenario_id, canonical=d.scenario_id,
                 labels=d.names.model_dump(),
+                max_duration_ms=scenario_proxy.max_duration_ms(room_id, d.scenario_id),
             )
             for d in defs
         ]
@@ -286,6 +311,8 @@ def _project_scenario_managers(scenario_proxy: Any) -> list[CatalogDevice]:
                 values=value_table + [CatalogValueLabel(
                     wire="none", canonical="none",
                     labels={"ru": "выключено", "en": "off"},
+                    # the ceiling for deactivating the room (slowest full power-down)
+                    max_duration_ms=scenario_proxy.deactivate_ceiling_ms(room_id),
                 )],
                 labels={"ru": "сценарий", "en": "scenario"},
             )],

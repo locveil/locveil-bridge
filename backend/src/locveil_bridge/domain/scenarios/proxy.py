@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from locveil_bridge.domain.scenarios.models import ScenarioDefinition
+from locveil_bridge.domain.scenarios.reconciler import deactivate_ceiling_ms, scenario_ceiling_ms
 from locveil_bridge.domain.scenarios.service import ScenarioManager
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,24 @@ class ScenarioProxy:
             (d for d in self.scenario_manager.scenario_definitions.values()
              if d.room_id == room_id),
             key=lambda d: d.scenario_id,
+        )
+
+    def max_duration_ms(self, room_id: str, scenario_id: str) -> int:
+        """The catalog's `max_duration_ms` for a scenario value (VWB-46): worst graceful
+        teardown + cold activation, from the planners over state overrides —
+        confirmation_timing.md §4.3. Config-stable, never typed by hand."""
+        defs = self.room_scenarios(room_id)
+        scenario = next(d for d in defs if d.scenario_id == scenario_id)
+        return scenario_ceiling_ms(
+            scenario, defs, self.scenario_manager.topology, self.device_manager.devices,
+        )
+
+    def deactivate_ceiling_ms(self, room_id: str) -> int:
+        """The catalog's `max_duration_ms` for the `none` value: the slowest full
+        power-down of any scenario of the room."""
+        return deactivate_ceiling_ms(
+            self.room_scenarios(room_id), self.scenario_manager.topology,
+            self.device_manager.devices,
         )
 
     def active_id(self, room_id: str) -> str:

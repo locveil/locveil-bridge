@@ -8,8 +8,8 @@
     "kind": "stateful", "feedback": false, "state_field": "input",
     "select": {
       "by_value": {
-        "video": { "command": "input_video" },
-        "s_vhs": { "command": "input_s_vhs" }
+        "video": { "command": "input_video", "labels": { "ru": "видео", "en": "video" } },
+        "s_vhs": { "command": "input_s_vhs", "labels": { "ru": "S-VHS", "en": "S-VHS" } }
       }
     },
     "gate": { "delay_ms": 500 }

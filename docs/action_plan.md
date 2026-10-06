@@ -661,35 +661,6 @@ endpoint).
   DOC-16.)* **Redefinition OWNER-CONFIRMED 2026-10-05** ("VWB-39 redefinition is fine,
   confirmed" — relayed by the PROD-28 coordinator; the scope above stands as reconciled).
 
-- [ ] **VWB-46** `[P1]` `[release]` — **Catalog `catalog-v1.11.0` — the PROD-18 round-1 cut
-  (implementation of VWB-33 + VWB-34).** Filed 2026-10-06 at the PROD-18 intake; designs:
-  [`docs/design/language_data_convention.md`](design/language_data_convention.md) (VWB-33) +
-  [`docs/design/confirmation_timing.md`](design/confirmation_timing.md) (VWB-34). ONE batched minor cut,
-  ONE voice re-pin (the board's binding condition). Scope, in order: **(1)** by-value select
-  label slot — `CapabilitySelect.by_value` values gain optional `labels` (`LocalizedName`), the
-  projection emits them on the `set(value)` param table; the 9 values on `mf_amplifier.input` /
-  `upscaler.input` get their ru/en strings from the design; **(2)** louver labels —
-  `MitsubishiHvac.json` `vane` «жалюзи» → «заслонка», `widevane` → the design's string; **(3)**
-  the localization guard — check-style tests over the committed golden (`test_contracts_golden.py`):
-  every device/room name and every field label carries ru+en; every enum value carries ru+en
-  labels except the bare `power` on/off pair; `unit` is a symbol; **(4)** tier 1 —
-  `CatalogCapability.confirm_timeout_ms` (optional int), emitted iff `gate.poll_timeout_ms`
-  is set, equal to it; **(5)** tier 2 — `CatalogValueLabel.max_duration_ms` (optional int) on
-  the scenario `set(value)` param + field tables, from the cold-plan derivation (teardown ceiling
-  + activation ceiling, state-override plans) implemented beside `build_plan` and exposed through
-  the scenario proxy to the catalog builder; a unit test pins the derivation on a fixture
-  topology; **(6)** guide sections "Localization (since contract v1.11)" + "Timing (since
-  contract v1.11)" — the designs' texts verbatim; **(7)** `CONTRACT_VERSION` → `1.11.0`,
-  golden + `openapi.json` + `backend/openapi.json` regenerated, STAMP, lightweight tag on the
-  landing commit, registry row; **(8)** UI types regen (`config-ui-stays-functional`: `npm run
-  gen:api-types`, `check`, `build` — no component change required; the HvacPanel expectation is
-  a separate later UI task). **Out:** tier 3 (VWB-47), German cosmetics, the vane/widevane
-  crossover fixtures (voice-side, separate), the in-flight scenario lock (tier-3 arc). `contracts:`
-  verdict at completion = `catalog-v1.11.0` cut (minor), re-pin owed: voice, commons.
-  **Open for the owner before the cut** (recorded in the timing design §4.5): whether the
-  eMotiva driver's readiness hold (DRV-39, up to 15 s inside dispatch, invisible to the plan)
-  enters the tier-2 sum.
-
 - [ ] **VWB-47** `[P1]` `[release]` — **Scenario job API (tier 3) — design.** Filed 2026-10-06
   as the PROD-18 tier-3 placeholder; the owner's round-2 answer landed the same day (board
   PROD-18 "Round 2 DECIDED", decisions 9–10): **build now, as its own arc** — bridge job-API
@@ -705,6 +676,19 @@ endpoint).
   Sequenced AFTER VWB-46 lands (`catalog-v1.11.0`). Deliverable: a design doc under
   `docs/design/scenarios/`; the implementation task(s) filed at its completion. Pointer from
   [`docs/design/confirmation_timing.md`](design/confirmation_timing.md) §7.
+
+- [ ] **VWB-48** `[P2]` `[deferred]` — **Zone-form `power` is absent from the catalog (the eMotiva).**
+  Filed 2026-10-06 at the VWB-46 intake (`review-then-remediate`; found by the VWB-34 design,
+  [`docs/design/confirmation_timing.md`](design/confirmation_timing.md) §3, coordinator ruling:
+  its own task, outside PROD-18). `EMotivaXMC2.power` is declared with `zones` (zone 1 / zone 2,
+  each with its own on/off actions and state field) and no capability-level `actions`;
+  `_project_capability_actions` walks `cap.actions` only, so the capability projects as an empty
+  husk and is suppressed — the processor's power is reachable through scenarios but not through
+  the canonical device surface, and its 6 s gate has no `confirm_timeout_ms` to ride on. Decide
+  the projection for zone-form power (the main zone as `power.on/off`? per-zone values on a
+  `set`? a `zone` param?) in a short design note, then project it; a catalog MINOR cut (new
+  capability on a device) batched with the next deliberate cut. Pre-existing since the zones
+  model landed; no consumer asked for it yet.
 
 ### UI — config-ui
 
@@ -922,7 +906,9 @@ endpoint).
   change first exposes the schema. *(Catalog version note, PROD-28 intake 2026-10-05 — council
   HK-13: the proposal to batch this schema exposure with the README-split cut was WITHDRAWN. The
   split takes `catalog-v1.10.0` on its own (VWB-44); CORE-12's exposure cuts the NEXT catalog
-  version after it — a minor, three-part: `catalog-v1.11.0` unless another cut lands first.)*
+  version after it — a minor, three-part. *Shifted twice by PROD-18 (2026-10-06): `catalog-v1.11.0`
+  went to the round-1 cut (VWB-46), `catalog-v1.12.0` is reserved for tier 3 (VWB-47) — CORE-12
+  takes `catalog-v1.13.0` unless another cut lands first.)*
 
 - [ ] **CORE-13** `[P2]` `[deferred]` — **Config-driven driver activation** (CORE-7 follow-up,
   filed off the 2026-07-18 findings analysis; `design-then-implement` — a short design note, and

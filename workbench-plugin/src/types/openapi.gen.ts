@@ -281,8 +281,10 @@ export interface paths {
          *       - `action_not_supported` (404)
          *       - `param_invalid` (400) - currently mapped from any perform_action failure with
          *         param-shaped error text; refined later if/when handlers distinguish cleanly.
-         *       - `device_unreachable` (503) - timeout OR `state.reachable` flipped False during
-         *         the wait (a per-control `meta/error` `r` flag landed; A3 convention).
+         *       - `device_unreachable` (503) - the device handler reported a reachability
+         *         failure (connection lost/refused), the echo wait timed out, or
+         *         `state.reachable` flipped False during the wait (a per-control `meta/error`
+         *         flag landed, per the Wirenboard MQTT convention).
          *       - `internal_error` (500) - everything else.
          */
         post: operations["execute_canonical_action_devices__device_id__canonical_post"];
@@ -1603,6 +1605,11 @@ export interface components {
         CatalogCapability: {
             /** Actions */
             actions?: components["schemas"]["CatalogAction"][] | null;
+            /**
+             * Confirm Timeout Ms
+             * @description Longest the bridge waits for this capability's device to confirm an action before reporting failure, in milliseconds. Absent = the default 500 ms echo window.
+             */
+            confirm_timeout_ms?: number | null;
             /** Fields */
             fields?: components["schemas"]["CatalogField"][] | null;
             /**
@@ -1762,6 +1769,11 @@ export interface components {
             labels?: {
                 [key: string]: string;
             } | null;
+            /**
+             * Max Duration Ms
+             * @description Scenario values only: the ceiling, in milliseconds, for activating this scenario from any state of its room (the full sequential switch chain, worst case). On the `none` entry: the ceiling for deactivating the room. Absent on every other value table.
+             */
+            max_duration_ms?: number | null;
             /** Wire */
             wire: string;
         };

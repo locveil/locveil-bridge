@@ -526,6 +526,111 @@ def build_plan(scenario, topology: Topology, devices: Dict[str, Any]) -> Reconci
     return plan
 
 
+# --- VWB-34/VWB-46: timing ceilings (the catalog's `max_duration_ms`) ----------
+
+
+def plan_ceiling_ms(actions: List[PlannedAction]) -> int:
+    """Worst-case wall clock of the bridge's own waiting over an ordered chain:
+    per step its pre-delay plus its gate (feedback devices may poll up to
+    ``poll_timeout_ms``; no-feedback devices wait ``delay_ms``). Execution is strictly
+    sequential, so the sum IS the ceiling. The one formula behind the force-reconcile
+    dialog's ETA and the catalog's scenario ``max_duration_ms`` (confirmation_timing.md
+    §4.3) — never computed two ways. Dispatch time itself is not counted: it is bounded
+    by ``DISPATCH_TIMEOUT_S`` as a hang guard, and the eMotiva's readiness hold (DRV-39)
+    is absorbed by the consumer's margin by decision (PROD-18)."""
+    total = 0
+    for a in actions:
+        total += a.pre_delay_ms
+        total += a.poll_timeout_ms if (a.feedback and a.poll_timeout_ms) else a.delay_ms
+    return total
+
+
+class _ColdState:
+    """Every state attribute reads ``None`` — nothing is satisfied, every action is
+    emitted: the maximal activation plan the real planner can produce."""
+
+    def __getattr__(self, name: str) -> None:
+        return None
+
+
+class _AnyValue:
+    """Equal to anything — a state value that satisfies every ``on_value``."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __hash__(self) -> int:
+        return 0
+
+    def __str__(self) -> str:
+        return "on"
+
+
+class _HotState:
+    """Every state attribute reads as 'on' — every power-off is emitted: the maximal
+    teardown plan."""
+
+    def __getattr__(self, name: str) -> Any:
+        return _AnyValue()
+
+
+class _StateOverride:
+    """A stand-in around a real device object: the same capability map, a fixed
+    answer to every state question. The planners read nothing else about a device."""
+
+    def __init__(self, device: Any, state: Any):
+        self.capabilities = getattr(device, "capabilities", None)
+        self._state = state
+
+    def get_current_state(self) -> Any:
+        return self._state
+
+
+def _override(devices: Dict[str, Any], state: Any) -> Dict[str, Any]:
+    return {device_id: _StateOverride(d, state) for device_id, d in devices.items()}
+
+
+def cold_activation_plan(scenario, topology: Topology, devices: Dict[str, Any]) -> ReconcilePlan:
+    """``build_plan`` with every device believed in no state at all (the COLD
+    override): every power action on the resolved path (zone-aware, SCN-16), every
+    input action, `reconcile: false` capabilities skipped exactly as at runtime."""
+    return build_plan(scenario, topology, _override(devices, _ColdState()))
+
+
+def hot_teardown_plan(device_ids, devices: Dict[str, Any]) -> ReconcilePlan:
+    """``build_power_off_plan`` with every device believed ON (the HOT override):
+    every power-off action for the given devices, every zone."""
+    return build_power_off_plan(device_ids, _override(devices, _HotState()))
+
+
+def scenario_ceiling_ms(scenario, room_scenarios, topology: Topology, devices: Dict[str, Any]) -> int:
+    """``max_duration_ms`` for activating ``scenario`` from ANY state of its room: the
+    worst graceful teardown (the outgoing scenario whose exclusive devices confirm
+    slowest) plus the cold activation. ``room_scenarios`` are every definition of the
+    room, the scenario itself included (it is skipped)."""
+    activation = plan_ceiling_ms(cold_activation_plan(scenario, topology, devices).actions)
+    incoming = resolve_targets(scenario, topology)[2]
+    teardown = 0
+    for other in room_scenarios:
+        if other.scenario_id == scenario.scenario_id:
+            continue
+        outgoing = resolve_targets(other, topology)[2]
+        plan = hot_teardown_plan(sorted(outgoing - incoming), devices)
+        teardown = max(teardown, plan_ceiling_ms(plan.actions))
+    return teardown + activation
+
+
+def deactivate_ceiling_ms(room_scenarios, topology: Topology, devices: Dict[str, Any]) -> int:
+    """``max_duration_ms`` for the ``none`` value: the slowest full power-down of any
+    scenario of the room."""
+    worst = 0
+    for defn in room_scenarios:
+        involved = resolve_targets(defn, topology)[2]
+        plan = hot_teardown_plan(sorted(involved), devices)
+        worst = max(worst, plan_ceiling_ms(plan.actions))
+    return worst
+
+
 # --- SCN-11: per-device force-reconcile (user-mediated desync repair) ---------
 
 

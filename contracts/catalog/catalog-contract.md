@@ -46,6 +46,63 @@ the shapes; it must not assume another house carries the same devices.
   readable fields is suppressed from the catalog. (The TVs' `input` was the one case
   — it carries a real `set` since contract v1.2 and is back in the catalog.)
 
+## Localization (since contract v1.11)
+
+Which catalog surfaces carry human language, in which locales, and what a consumer may
+assume about them. Who contributes which words across the product — the nouns here, the
+verbs in the voice assistant's own vocabulary — is the organisation's language-data
+convention; this section is the machine rule that convention points at.
+
+- **Locales.** Every localized surface carries `ru` and `en`. `de` is optional and other
+  locales may appear; a consumer that wants a locale an entry lacks falls back to `ru`.
+  Locale keys are lowercase two-letter language codes.
+- **Localized surfaces.** Device `names` and room `names`; `aliases` — per locale, a list
+  of spoken alternatives, authored `ru` first, never required and never complete; field
+  `labels`; and the `labels` of every entry in a `values` table, on a field and on an
+  action param alike — including the `set(value)` table of a selection capability.
+- **The one exemption.** The `on` / `off` entries of a `power` field carry no labels:
+  the words for power are a consumer's verbs, not catalog nouns.
+- **Not localized, by design.** `canonical` and `wire` are identifiers. Capability names,
+  action names, param names and `group` are identifiers too — a consumer never shows
+  them as words or matches speech against them. A param's `description` is
+  developer-facing English. A `unit` is a symbol (`°C`, `%`, `dB`, `min`), the same in
+  every locale.
+- **The guard.** The committed golden sample is checked against these rules on every
+  change to the bridge: a configuration that breaks them cannot be regenerated into the
+  sample. A consumer may therefore treat a missing `ru` or `en` on a localized surface as
+  a defect to report, not a case to handle.
+
+## Timing (since contract v1.11)
+
+What a consumer may expect to wait for a confirmed action, published beside the action it
+applies to, so that request timeouts are sized from the catalog and never from a
+conversation.
+
+- **`confirm_timeout_ms` on a capability** is the longest the bridge itself waits for the
+  device to confirm an action on that capability before it reports failure. It is present
+  only where the device confirms slowly — an air conditioner that reads back on its packet
+  cadence, a streamer waking from standby, a television's power; absent means the default
+  window of 500 ms. A request that waits for confirmation (`wait: true`, the default)
+  returns within this bound plus transport: a confirmed state, or a failure saying the
+  device never confirmed. A consumer sizes its request timeout above the value, never
+  below. The value is a promise about the bridge's own waiting, not a measurement of the
+  device: a confirmed action usually returns well before it.
+- **`max_duration_ms` on a scenario value** — in the scenario manager's `scenario`
+  `set(value)` table and its `scenario` field — is the ceiling for activating that
+  scenario from any state of its room. The bridge executes a switch as one sequential
+  chain: it powers down what the outgoing scenario no longer needs, then brings the
+  incoming scenario's devices up in topology order, confirming or settling each step
+  before the next; the value is the worst-case sum of those confirmation windows and
+  settle delays. It is never exceeded by the bridge's own waiting and it is usually beaten
+  by a wide margin — a warm switch between scenarios that share devices takes seconds. On
+  the field's `none` entry the value is the ceiling for deactivating the room (powering
+  its active scenario down). A manual step the scenario needs from a person is not timed.
+- **Where the numbers come from.** Both are derived from the bridge's configuration — each
+  capability's confirmation gate, the topology's settle delays, the scenario definitions —
+  and never typed by hand. When a gate is retuned the catalog's content hash moves and a
+  running consumer re-fetches; the contract does not change. The numbers describe how long
+  the bridge is prepared to wait, not how fast a device is.
+
 ## Versioning
 
 The contract is versioned as a whole, `MAJOR.MINOR.PATCH`. Two things carry a version

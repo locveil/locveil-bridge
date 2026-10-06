@@ -54,6 +54,17 @@ stamp and the tag are the machine-readable authority.
   `catalog-contract.md`, and this README left the pinned set (a minor: the set gained
   a file). Versions gained a third level and tags became three-part from this cut on;
   the versioning rule was rewritten to match. Golden and OpenAPI schema byte-identical.
+- **v1.11.0** — the guide gained two sections. *Localization:* every localized surface
+  carries `ru` + `en` (`de` optional), every enum value is labelled except the `power`
+  field's `on`/`off` pair, `description` is developer English and `unit` a symbol; a
+  by-value selection's `set(value)` table is now labelled in place (the amplifier's and
+  the upscaler's inputs gained their words), the HVAC louver labels became «заслонка» /
+  «заслонка по горизонтали», and the rules are guarded by tests over the golden.
+  *Timing:* `confirm_timeout_ms` on a capability (the bridge's own confirmation window,
+  where it exceeds the 500 ms default) and `max_duration_ms` on every scenario value
+  (the ceiling for a switch from any state of the room, derived from the planners).
+  Schema: two optional fields; golden: 27 capabilities and 19 scenario values gained a
+  number, 9 values gained labels, 6 labels changed.
 
 ## Regeneration
 
@@ -66,7 +77,7 @@ uv run --project backend locveil-openapi -o backend/openapi.json && cp backend/o
 ```
 
 `locveil-catalog` builds the catalog **offline** — typed configs + capability maps +
-rooms + scenario definitions, no drivers, no network, no broker — so the dump is
+rooms + scenario definitions + the signal topology, no drivers, no network, no broker — so the dump is
 deterministic (devices sorted by id; identical bytes across runs).
 
 **Every regeneration that moves a pinned file is a contract cut.** The version lives

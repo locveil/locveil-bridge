@@ -174,7 +174,7 @@ def test_guide_holds_the_normative_text_and_the_readme_points_at_it():
     """The split's two halves stay put: param semantics + the versioning rule live in
     the pinned guide; the unlocked README links to it instead of restating it."""
     guide = (CONTRACTS / "catalog-contract.md").read_text(encoding="utf-8")
-    for heading in ("## Param semantics", "## Versioning"):
+    for heading in ("## Param semantics", "## Localization", "## Timing", "## Versioning"):
         assert heading in guide, f"catalog-contract.md lost its {heading!r} section"
     readme = (CONTRACTS / "README.md").read_text(encoding="utf-8")
     assert "(catalog-contract.md)" in readme
@@ -203,3 +203,175 @@ def test_contract_v13_hvac_action_params_carry_field_value_tables():
             )
         mode_values = {v["canonical"]: v for v in caps["mode"]["fields"][0]["values"]}
         assert mode_values["cool"]["labels"]["ru"] == "охлаждение"
+
+
+# --- VWB-46 (contract v1.11): the Localization + Timing rules, guarded on the golden ----
+# language_data_convention.md §5 and confirmation_timing.md §3/§4. The golden is the
+# committed sample of a real house; together with the drift test above these mean a
+# configuration that breaks a rule cannot be regenerated into a passing golden.
+
+
+def _floor(labels, where):
+    assert isinstance(labels, dict), f"{where}: no labels"
+    for loc in ("ru", "en"):
+        assert isinstance(labels.get(loc), str) and labels[loc].strip(), f"{where}: missing {loc}"
+
+
+def _walk_value_tables(golden):
+    """Yield (where, kind, device, capability, holder_name, entry) for every values entry."""
+    for d in golden["devices"]:
+        for c in d["capabilities"]:
+            for f in c.get("fields") or []:
+                for v in f.get("values") or []:
+                    yield f"{d['id']}.{c['name']}.{f['name']}: {v['canonical']}", "field", d, c, f["name"], v
+            for a in c.get("actions") or []:
+                for p in a.get("params") or []:
+                    for v in p.get("values") or []:
+                        yield (f"{d['id']}.{c['name']}.{a['name']}({p['name']}): {v['canonical']}",
+                               "param", d, c, p["name"], v)
+
+
+def test_contract_v111_names_carry_the_locale_floor():
+    golden = _golden()
+    for d in golden["devices"]:
+        _floor(d["names"], f"device {d['id']} names")
+    for r in golden["rooms"]:
+        _floor(r["names"], f"room {r['id']} names")
+
+
+def test_contract_v111_field_labels_carry_the_locale_floor():
+    golden = _golden()
+    for d in golden["devices"]:
+        for c in d["capabilities"]:
+            for f in c.get("fields") or []:
+                _floor(f.get("labels"), f"{d['id']}.{c['name']}.{f['name']} labels")
+
+
+def test_contract_v111_every_value_is_labelled_except_the_power_pair():
+    """The one exemption: an entry on a FIELD named `power` of the capability `power`
+    whose canonical is `on`/`off` — the words for power are the consumer's verbs."""
+    golden = _golden()
+    exempt = 0
+    for where, kind, _d, c, holder, v in _walk_value_tables(golden):
+        if (kind == "field" and c["name"] == "power" and holder == "power"
+                and v["canonical"] in ("on", "off")):
+            exempt += 1
+            continue
+        _floor(v.get("labels"), where)
+    assert exempt > 0  # the exemption is exercised by the relay fleet
+
+
+def test_contract_v111_field_labels_never_collide_with_aliases():
+    """Decision 4 made mechanical: a Russian field label is never also a spoken alias
+    (the «жалюзи» collision — HVAC louver vs the cabinet rollers — stays dead)."""
+    golden = _golden()
+    field_labels = {
+        f["labels"]["ru"].strip().lower()
+        for d in golden["devices"] for c in d["capabilities"] for f in c.get("fields") or []
+    }
+    aliases = set()
+    for entity in golden["devices"] + golden["rooms"]:
+        for words in (entity.get("aliases") or {}).values():
+            aliases.update(w.strip().lower() for w in words)
+    assert not (field_labels & aliases), f"field labels colliding with aliases: {field_labels & aliases}"
+
+
+def test_contract_v111_aliases_are_ru_first():
+    golden = _golden()
+    for entity in golden["devices"] + golden["rooms"]:
+        aliases = entity.get("aliases")
+        if aliases is None:
+            continue
+        assert aliases.get("ru"), f"{entity['id']}: aliases present but no ru list"
+        for loc, words in aliases.items():
+            assert re.fullmatch(r"[a-z]{2}", loc), f"{entity['id']}: alias locale {loc!r}"
+            assert words and all(isinstance(w, str) and w.strip() for w in words), (
+                f"{entity['id']}: empty alias in {loc}"
+            )
+
+
+def test_contract_v111_units_are_symbols():
+    golden = _golden()
+    for d in golden["devices"]:
+        for c in d["capabilities"]:
+            holders = list(c.get("fields") or [])
+            for a in c.get("actions") or []:
+                holders.extend(a.get("params") or [])
+            for h in holders:
+                unit = h.get("unit")
+                if unit is None:
+                    continue
+                assert len(unit) <= 5 and not any(ch.isspace() for ch in unit), (
+                    f"{d['id']}.{c['name']}.{h['name']}: unit {unit!r} is not a symbol"
+                )
+
+
+def test_contract_v111_confirm_timeout_equals_the_gate(monkeypatch):
+    """Tier 1: present iff the capability's gate declares a poll timeout, and equal to it
+    — the same number the canonical endpoint waits (DRV-29). Checked against the
+    resolved capability maps the golden was built from, device by device."""
+    from locveil_bridge.cli.dump_catalog import _standin
+    from locveil_bridge.infrastructure.capabilities.loader import attach_capability_maps
+    from locveil_bridge.infrastructure.config.manager import ConfigManager
+
+    monkeypatch.chdir(REPO)
+    typed = ConfigManager(config_dir="config").get_all_typed_configs()
+    devices = {device_id: _standin(cfg) for device_id, cfg in typed.items()}
+    attach_capability_maps(devices, REPO / "config" / "capabilities")
+    golden = _golden()
+    published = 0
+    for d in golden["devices"]:
+        device = devices.get(d["id"])
+        if device is None:  # the scenario managers carry no gates
+            for c in d["capabilities"]:
+                assert c.get("confirm_timeout_ms") is None
+            continue
+        for c in d["capabilities"]:
+            gate = device.capabilities.get(c["name"]).gate
+            expected = gate.poll_timeout_ms if gate.poll_timeout_ms else None
+            assert c.get("confirm_timeout_ms") == expected, f"{d['id']}.{c['name']}"
+            published += expected is not None
+    assert published >= 1
+
+
+def test_contract_v111_scenario_values_carry_max_duration():
+    """Tier 2: every scenario value (and the field's `none`) carries a positive ceiling;
+    the `set(value)` table and the field table agree; no other value table carries one."""
+    golden = _golden()
+    for where, _kind, d, c, _holder, v in _walk_value_tables(golden):
+        if d["device_class"] == "ScenarioManager" and c["name"] == "scenario":
+            assert isinstance(v.get("max_duration_ms"), int) and v["max_duration_ms"] > 0, where
+        else:
+            assert v.get("max_duration_ms") is None, where
+    for d in golden["devices"]:
+        if d["device_class"] != "ScenarioManager":
+            continue
+        scenario = next(c for c in d["capabilities"] if c["name"] == "scenario")
+        field = {v["canonical"]: v["max_duration_ms"] for v in scenario["fields"][0]["values"]}
+        param = {v["canonical"]: v["max_duration_ms"]
+                 for v in next(a for a in scenario["actions"] if a["name"] == "set")["params"][0]["values"]}
+        assert param == {k: ms for k, ms in field.items() if k != "none"}
+        assert "none" in field
+
+
+def test_contract_v111_by_value_selects_label_every_option():
+    """The nine gaps of catalog-v1.10.0: a by-value select's `set(value)` table is
+    labelled in place (`mf_amplifier.input`, `upscaler.input`)."""
+    golden = _golden()
+    for device_id in ("mf_amplifier", "upscaler"):
+        cap = next(c for c in _device(golden, device_id)["capabilities"] if c["name"] == "input")
+        (param,) = next(a for a in cap["actions"] if a["name"] == "set")["params"]
+        assert param["values"], device_id
+        for v in param["values"]:
+            _floor(v.get("labels"), f"{device_id}.input.set(value): {v['canonical']}")
+
+
+def test_contract_v111_louver_labels_are_zaslonka():
+    """Decision 4: the HVAC `vane` field label is «заслонка» (and `widevane` «заслонка по
+    горизонтали»); the cabinet rollers keep their «жалюзи» alias."""
+    golden = _golden()
+    for device_id in ("bedroom_hvac", "children_room_hvac", "living_room_hvac"):
+        caps = {c["name"]: c for c in _device(golden, device_id)["capabilities"]}
+        assert caps["vane"]["fields"][0]["labels"]["ru"] == "заслонка"
+        assert caps["widevane"]["fields"][0]["labels"]["ru"] == "заслонка по горизонтали"
+    assert _device(golden, "cabinet_roller_left")["aliases"]["ru"] == ["жалюзи"]

@@ -29,6 +29,7 @@ from locveil_bridge.domain.ports import StateRepositoryPort
 from locveil_bridge.domain.rooms.service import RoomManager
 from locveil_bridge.domain.scenarios.proxy import ScenarioProxy
 from locveil_bridge.domain.scenarios.service import ScenarioManager
+from locveil_bridge.domain.topology.loader import load_topology
 from locveil_bridge.infrastructure.capabilities.loader import attach_capability_maps
 from locveil_bridge.infrastructure.config.manager import ConfigManager
 from locveil_bridge.presentation.api.catalog import CONTRACT_VERSION, build_catalog
@@ -106,6 +107,11 @@ def build_offline_catalog(config_dir: str = "config"):
         scenario_dir=Path(config_dir) / "scenarios",
     )
     asyncio.run(scenario_manager.load_scenarios())
+    # VWB-46: the scenario values' `max_duration_ms` is derived by the planners over the
+    # signal topology (Layer 0) — the runtime loads it in `initialize()`, which the
+    # offline world skips (no state restore, no validation side effects), so load it here
+    # the same way. Without it every scenario resolves to an empty path.
+    scenario_manager.topology = load_topology(Path(config_dir) / "topology.json")
     proxy = ScenarioProxy(scenario_manager, device_manager)
 
     return build_catalog(device_manager, room_manager, proxy)

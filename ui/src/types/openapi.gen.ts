@@ -1605,6 +1605,11 @@ export interface components {
         CatalogCapability: {
             /** Actions */
             actions?: components["schemas"]["CatalogAction"][] | null;
+            /**
+             * Confirm Timeout Ms
+             * @description Longest the bridge waits for this capability's device to confirm an action before reporting failure, in milliseconds. Absent = the default 500 ms echo window.
+             */
+            confirm_timeout_ms?: number | null;
             /** Fields */
             fields?: components["schemas"]["CatalogField"][] | null;
             /**
@@ -1764,6 +1769,11 @@ export interface components {
             labels?: {
                 [key: string]: string;
             } | null;
+            /**
+             * Max Duration Ms
+             * @description Scenario values only: the ceiling, in milliseconds, for activating this scenario from any state of its room (the full sequential switch chain, worst case). On the `none` entry: the ceiling for deactivating the room. Absent on every other value table.
+             */
+            max_duration_ms?: number | null;
             /** Wire */
             wire: string;
         };

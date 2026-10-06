@@ -45,6 +45,13 @@ class CapabilityAction(BaseModel):
         description="Pause after this step before the next one runs (sequence steps; IR "
                     "macros need inter-press gaps). Ignored on the last/only step. VWB-17.",
     )
+    labels: Optional[LocalizedName] = Field(
+        None,
+        description="Localized human strings for this option when the action is the value "
+                    "of a by-value select (the catalog's `set(value)` table — ru + en "
+                    "required, de optional; the catalog's Localization rule). Meaningless on "
+                    "sequence steps and ordinary actions; the catalog ignores it there. VWB-46.",
+    )
 
     @model_validator(mode="after")
     def _exactly_one_invocation(self) -> "CapabilityAction":
