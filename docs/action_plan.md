@@ -636,34 +636,6 @@ endpoint).
   - **Sequence-form caveat — RESOLVED 2026-07-04 (VWB-17 DONE):** the canonical endpoint now routes `sequence`-form actions (shared `CapabilityAction.expand()` — per-step param translation, inter-step `delay_after_ms`, mid-sequence failure naming the step). Crossover fixtures may cover sequence-form actions freely.
   - Spec: `locveil-voice/docs/design/mqtt_integration.md` §14.
 
-- [ ] **VWB-33** `[P1]` `[release]` `DOING` — **Language-data contribution convention — design**
-  (`design-then-implement`; filed 2026-07-10 off the chat analysis of how devices contribute
-  language-specific data to voice; re-tagged `[deferred]` the same day — board-level cross-repo).
-  **Board PROD-18 member (lead ID); council round 1 DECIDED by the owner 2026-10-06 — the
-  "Round 1 DECIDED" paragraph of `../locveil-commons/board/BOARD.md` PROD-18 is the decision of
-  record and binds this design.** *(Intake reconciliation 2026-10-06: the July text's "some fleet
-  fields carry no labels at all" is FALSE at catalog-v1.10.0 — all 122 fields are labelled (101
-  ru/en, 21 ru/en/de); the real gaps are the 9 enum values of the two IR by-value selects
-  (`mf_amplifier.input` × 7, `upscaler.input` × 2) whose projection has no label slot, plus the
-  78 bare `power` on/off values the owner exempted. The convention's home is no longer "candidate
-  `contracts/README.md`": the MACHINE rule lives in the pinned guide `contracts/catalog/
-  catalog-contract.md`, the OWNERSHIP prose in commons `process/language-data.md` (IMPL-27,
-  landed) — this design references it, never duplicates it.)* **Decisions designed to (not
-  reopened):** label floor ru+en required / de optional / consumer may fall back to ru; every
-  enum value carries labels except the bare `power` on/off pair; the 9 gaps close via a label
-  slot on by-value selects; a check-style test over the committed golden is the guard; the
-  guide gains a "Localization (since contract v1.11)" section whose exact text this design
-  drafts; `description` stays developer English and `unit` a symbol (documented as such);
-  aliases are an authoring-checklist item, ru-first, no minimum; the HVAC `vane` field label
-  «жалюзи» → **«заслонка»** (the cabinet rollers keep their «жалюзи» alias), `widevane`
-  renamed consistently (this design proposes the string); no German cosmetics. **Deliverable:**
-  a design doc under `docs/design/` (`language_data_convention`, linked here when it lands) — the
-  convention, the verified audit numbers, the guard specification, the by-value label slot
-  (model + config shape + the 9 migrated values), the louver rename, the authoring-checklist
-  text, the guide section verbatim. Implementation rides **VWB-46** (the `catalog-v1.11.0`
-  cut, shared with VWB-34). Closes when the design is committed — council-decided,
-  implementation pending.
-
 - [ ] **VWB-34** `[P1]` `[release]` `DOING` — **Confirmation timing published in the contract —
   design** (`design-then-implement`; filed 2026-07-10 off the DRV-29 post-mortem: "your HTTP
   timeout must exceed 15 s" was contract information delivered out-of-band — retune a gate and
@@ -713,8 +685,9 @@ endpoint).
   confirmed" — relayed by the PROD-28 coordinator; the scope above stands as reconciled).
 
 - [ ] **VWB-46** `[P1]` `[release]` — **Catalog `catalog-v1.11.0` — the PROD-18 round-1 cut
-  (implementation of VWB-33 + VWB-34).** Filed 2026-10-06 at the PROD-18 intake; designs: the
-  VWB-33 + VWB-34 design docs under `docs/design/` (linked here when they land). ONE batched minor cut,
+  (implementation of VWB-33 + VWB-34).** Filed 2026-10-06 at the PROD-18 intake; designs:
+  [`docs/design/language_data_convention.md`](design/language_data_convention.md) (VWB-33) +
+  the VWB-34 timing design (linked here when it lands). ONE batched minor cut,
   ONE voice re-pin (the board's binding condition). Scope, in order: **(1)** by-value select
   label slot — `CapabilitySelect.by_value` values gain optional `labels` (`LocalizedName`), the
   projection emits them on the `set(value)` param table; the 9 values on `mf_amplifier.input` /

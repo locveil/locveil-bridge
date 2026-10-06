@@ -28,6 +28,17 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — VWB-33 DONE: the language-data convention is designed.** The council had
+  already decided the floor (ru + en, de optional), the one exemption (the bare power pair), the
+  guard (a golden test) and the louver noun («заслонка»); the design's job was to make each of
+  those mechanical and to count before claiming. The count rewrote the premise: nothing in the
+  fleet lacks a field label — the nine words missing are the amplifier's and the upscaler's
+  selectable inputs, and they are missing because the by-value select has nowhere to write
+  them, so the fix is one optional field on the model, not an authoring pass. The guard grew a
+  test the decision did not ask for but implies: a Russian field label may never equal a
+  device alias, which is exactly the «жалюзи» collision stated as a rule. The guide section is
+  drafted word for word so the cut copies rather than composes. No code, no contract bytes.
+
 - **2026-10-06 — PROD-18 intake: VWB-33 + VWB-34 narrowed and re-tagged `[release]`; VWB-46 +
   VWB-47 filed.** The board's round-1 decisions arrived as the decision of record, so the two
   July texts were reconciled against the repo before any design started. Three claims fell:
