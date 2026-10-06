@@ -636,29 +636,6 @@ endpoint).
   - **Sequence-form caveat — RESOLVED 2026-07-04 (VWB-17 DONE):** the canonical endpoint now routes `sequence`-form actions (shared `CapabilityAction.expand()` — per-step param translation, inter-step `delay_after_ms`, mid-sequence failure naming the step). Crossover fixtures may cover sequence-form actions freely.
   - Spec: `locveil-voice/docs/design/mqtt_integration.md` §14.
 
-- [ ] **VWB-34** `[P1]` `[release]` `DOING` — **Confirmation timing published in the contract —
-  design** (`design-then-implement`; filed 2026-07-10 off the DRV-29 post-mortem: "your HTTP
-  timeout must exceed 15 s" was contract information delivered out-of-band — retune a gate and
-  voice's timeouts fire with no signal in the pinned catalog). **Board PROD-18 member; council
-  round 1 DECIDED by the owner 2026-10-06 (the board entry's "Round 1 DECIDED" paragraph binds
-  this design); round 2 DECIDED later the same day (timeout policy + tier-3 sequencing).**
-  *(Intake reconciliation 2026-10-06: the July text's "progress narration uses the existing SSE
-  state stream" is OPTIMISTIC — the scenarios channel carries only switched/shutdown events, no
-  per-step stream exists; and TIER 3 (async job) is NOT in this design — the owner's round-2
-  answer makes it its own arc, filed as **VWB-47**.)* **Decisions designed to (not reopened):
-  tier 1** = optional `confirm_timeout_ms` per capability, present iff the capability's gate
-  declares a poll timeout and equal to it (absent = the 500 ms default echo window; `delay_ms`
-  stays unexposed); **tier 2** = optional `max_duration_ms` on each scenario value label,
-  derived from the cold plan (sequential execution ⇒ the sum is the ceiling) — the design
-  specifies the derivation exactly, including the `build_plan` state-override variant, and
-  computes today's numbers; both land in the minor `catalog-v1.11.0` (CORE-12 shifts to the
-  next); the guide gains a "Timing (since contract v1.11)" section whose exact text this design
-  drafts; voice sizes requests from the field, the config value is the fallback (the speech
-  policy is voice's — round-2 decision 8); the HvacPanel progress expectation is a separate
-  later UI task. **Deliverable:** a design doc under
-  `docs/design/` (`confirmation_timing`, linked here when it lands). Implementation rides
-  **VWB-46**; tier 3 continues in **VWB-47**. Closes when the design is committed.
-
 - [ ] **VWB-39** `[P2]` `[deferred]` — **Descriptor conformance test — the bridge-side consuming
   surface locked to the OWNED convention (PROD-15 bridge delegation, item 4; the VWB-37 pattern).**
   *(Text reconciled 2026-10-05 at the PROD-28 intake, delegation item (e) — three stale claims
@@ -687,7 +664,7 @@ endpoint).
 - [ ] **VWB-46** `[P1]` `[release]` — **Catalog `catalog-v1.11.0` — the PROD-18 round-1 cut
   (implementation of VWB-33 + VWB-34).** Filed 2026-10-06 at the PROD-18 intake; designs:
   [`docs/design/language_data_convention.md`](design/language_data_convention.md) (VWB-33) +
-  the VWB-34 timing design (linked here when it lands). ONE batched minor cut,
+  [`docs/design/confirmation_timing.md`](design/confirmation_timing.md) (VWB-34). ONE batched minor cut,
   ONE voice re-pin (the board's binding condition). Scope, in order: **(1)** by-value select
   label slot — `CapabilitySelect.by_value` values gain optional `labels` (`LocalizedName`), the
   projection emits them on the `set(value)` param table; the 9 values on `mf_amplifier.input` /
@@ -709,7 +686,7 @@ endpoint).
   a separate later UI task). **Out:** tier 3 (VWB-47), German cosmetics, the vane/widevane
   crossover fixtures (voice-side, separate), the in-flight scenario lock (tier-3 arc). `contracts:`
   verdict at completion = `catalog-v1.11.0` cut (minor), re-pin owed: voice, commons.
-  **Open for the owner before the cut** (recorded in the timing design §6): whether the
+  **Open for the owner before the cut** (recorded in the timing design §4.5): whether the
   eMotiva driver's readiness hold (DRV-39, up to 15 s inside dispatch, invisible to the plan)
   enters the tier-2 sum.
 
@@ -727,7 +704,7 @@ endpoint).
   /scenario/jobs/{id}` for pollers and the UI; the UI progress stepper is a later task.
   Sequenced AFTER VWB-46 lands (`catalog-v1.11.0`). Deliverable: a design doc under
   `docs/design/scenarios/`; the implementation task(s) filed at its completion. Pointer from
-  the VWB-34 timing design (its tier-3 section).
+  [`docs/design/confirmation_timing.md`](design/confirmation_timing.md) §7.
 
 ### UI — config-ui
 

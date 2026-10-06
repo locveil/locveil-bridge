@@ -28,6 +28,20 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — VWB-34 DONE: the two timing numbers are designed, and computed.** Tier 1 is a
+  one-line rule — publish the gate's poll timeout under a consumer-facing name, present only
+  where it exists — and its table is twenty-seven capabilities, mostly the three air
+  conditioners. Tier 2 took the real work: the cold plan is not a number anyone types, it is
+  the ordinary planner run over a device that answers every state question with "unknown",
+  and the teardown half is the same planner run over one that answers "on". Running both over
+  today's config gave sums that start at 29.5 s for the music scenarios and reach 61.5 s for
+  Zappiti — twice the council's "~30 s", because a switch also pays for the outgoing
+  scenario's slowest exclusive device, and that is the streamer's 25 s standby poll in every
+  movie case. One thing the sum cannot see was recorded rather than hidden: the eMotiva holds a
+  command inside dispatch for up to 15 s after a transition, before the gate even starts.
+  The guide section is drafted verbatim; the owner chooses at the cut whether that hold is
+  declared or absorbed by the consumer's margin. Tier 3 stayed out, with its own task.
+
 - **2026-10-06 — VWB-33 DONE: the language-data convention is designed.** The council had
   already decided the floor (ru + en, de optional), the one exemption (the bare power pair), the
   guard (a golden test) and the louver noun («заслонка»); the design's job was to make each of
