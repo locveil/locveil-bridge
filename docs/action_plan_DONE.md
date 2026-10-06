@@ -393,6 +393,41 @@ possible round-3.
   from the VWB-33 design, verbatim); diagrams: none affected.
   contracts: catalog-v1.11.0 cut (minor — localization floor + guard, by-value labels, louver
   labels, confirm_timeout_ms, max_duration_ms); re-pin owed: voice (both copies), commons.
+- [x] **VWB-47** `[P1]` `[release]` — **DONE 2026-10-06** (design task; filed the same day at the
+  PROD-18 intake as the tier-3 placeholder, scoped by the owner's round-2 decisions 9–10 the same
+  afternoon). **Scenario job API (tier 3) — design →**
+  [`docs/design/scenarios/scenario_jobs.md`](design/scenarios/scenario_jobs.md). Starting point:
+  the bridge keeper's round-2 position (202 + `{job_id, max_duration_ms}`; step events at the two
+  reconciler points on the EXISTING `/events/scenarios` channel; terminal event extended; auth
+  orthogonal to PROD-4; REL-3 ARC ordering must not regress). **The design:** (a) the job — one run
+  of a room's chain (`switch` | `stop` | `reconcile`), created at the `ScenarioManager` chokepoint
+  so every door (canonical, REST, WB card, force_reconcile) produces one; `running → succeeded |
+  failed`, no queued, no cancelled; phases appear as they are planned (teardown at acceptance,
+  activation after it — today's order, zero regression incl. `graceful:false`); the record with
+  per-step status (`pending/running/done/failed/not_confirmed`), in memory, running + last 20 per
+  room, every id unknown after a restart (404 `job_unknown` — honest); (b) the lock — one
+  `asyncio.Lock` per room, acquired NON-blocking, `409 job_in_progress` on contention, never
+  queued; covers switch/stop/force_reconcile, not device-level actions (tier 1), `POST /reload`
+  waits bounded; the idempotency table (already-at-target → 200 `no_op`, same-target mid-job →
+  409 naming the job, stop mid-job → 409, stop after → new job); CORE-12 staged writes don't
+  interact; the UI's synchronous waits unchanged; (c) the exact shapes — canonical `wait:false`
+  → **202** with `state.{job_id, max_duration_ms}`, `wait:true` unchanged + `job_id`, the 409
+  body (`CanonicalErrorCode.JOB_IN_PROGRESS`, `CanonicalError.job_id`), REST `wait` + 409 detail,
+  `GET /scenario/jobs/{id}` + `GET /scenario/jobs?room=`, and the four event types with JSON
+  verbatim (`scenario_job_started`, `scenario_phase`, `scenario_step` ×2 per step, the extended
+  terminal `scenario_switched`/`scenario_shutdown`); (d) the seven rules a consumer may rely on
+  (start first / terminal last, no replay, the first event races the response, terminal always
+  arrives or the stream ends, timing, keepalives aren't progress, slow consumers are dropped —
+  the SSE manager's blocking `queue.put` is named as the implementation change); (e) voice's
+  round-2 build folded in as a relies-on table + four open points for its review; (f) contract:
+  MINOR additive, `catalog-v1.12.0`, golden byte-identical, the guide "Jobs (since contract
+  v1.12)" drafted verbatim; (g) the test plan (8) + the WB7 sitting's measurements and the
+  owner's one-page checklist verbatim; (h) sequencing (bridge impl → voice impl → sitting → cut
+  → re-pin), CORE-12 stays 1.13.0; five alternatives set aside. Implementation filed: **SCN-19**
+  `[release]`. Design-only — no code, no contract bytes moved.
+  docs: none — design doc only; the guide section lands with SCN-19's cut (contract/catalog-guide).
+  contracts: none — the cut is SCN-19's step 5 (`catalog-v1.12.0`, minor; re-pin owed there).
+
 ## UI — config-ui
 
 - [x] **UI-1** — **DONE** 2026-05-19 — backend `ab5402d`, UI `8ab2cfa`. On survey, the 8 modified UI files turned out to be one coherent appliance-category feature (not an unrelated layout refresh as initially thought) plus two unrelated SSE console-log cleanups; `docs/appliances.md` was the matching design doc. Shipped as a single paired commit per repo. `config/system.json` (UI) left untracked pending later check; `data/` added to UI `.gitignore`.

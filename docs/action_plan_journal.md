@@ -28,6 +28,18 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — VWB-47 DONE: the scenario job API is designed.** The arc exists for one
+  reason — nothing stops a second switch from running on top of the first — so the lock came
+  first: one per room, refused rather than queued, at the manager chokepoint every door already
+  passes through. The job is the record of one run of the chain, phases appearing exactly when
+  the chain plans them today so the REL-3 order cannot move; a restart forgets every job on
+  purpose, because the bridge cannot vouch for a chain it did not finish. The events ride the
+  existing scenarios stream — three new types and two extended terminal ones — and the design
+  spells out the seven things a consumer may rely on, including the one the current SSE manager
+  breaks (a stalled subscriber would pace the house). Voice's round-2 build is folded in as a
+  table of what it relies on; the owner gets a one-page WB7 checklist. SCN-19 implements; the
+  cut is 1.12.0 after the sitting. No code, no contract bytes.
+
 - **2026-10-06 — VWB-46 DONE: `catalog-v1.11.0` is cut.** Everything the two designs drafted
   went in as drafted — the slot, the nine words, the louver rename, the two guide sections
   verbatim, the two optional fields — and the guard tests passed on real data without a
