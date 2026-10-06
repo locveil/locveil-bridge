@@ -28,6 +28,26 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — SCN-19 intake: the consumer's review is in the spec; the reconciliation
+  found a contradiction in the entry itself.** Voice approved the job design with four changes,
+  all folded into `scenario_jobs.md` verbatim: a `202`'s `success: true` means accepted, never
+  done; a `404 job_unknown` is not spoken as a bare failure — voice reads the room's actual
+  state and speaks that; a closed or dead stream means reconnect-and-`GET`, and a job is lost
+  only on `404` or an unreachable bridge (the §6.4/§6.7 contradiction, now one rule); and the
+  `connected` / `keepalive` frames are written out byte-for-byte, with the answer that the
+  `202`'s `max_duration_ms` is always the catalog's number (same function, same config — the
+  one caveat is the operator-only `graceful: false` door). Voice's four open points are
+  answered in §8: acknowledgement + terminal only in the first cut, one record per room, the
+  mid-job `409` answered locally when voice owns the record, 1-2-4-8 s backoff capped at 30 s
+  with a `GET` on every reconnect. **The finding (`task-start-reconciliation`, class d):** the
+  entry says "no contract cut in this task" AND "openapi regen in the same change", but
+  `test_openapi_pin_matches_app` asserts the regenerated schema equals BOTH `backend/openapi.json`
+  and the byte-locked `contracts/catalog/openapi.json` — a regenerated backend schema with new
+  operations cannot pass CI at `1.11.0`, and the test's rule is the cut's rule (not to be
+  weakened). The implementation as specified cannot land green without one of: the cut moving
+  before the WB7 sitting, a branch, or a schema-hidden interim surface. Code untouched; the
+  owner rules on the shape before any of it is built.
+
 - **2026-10-06 — VWB-47 DONE: the scenario job API is designed.** The arc exists for one
   reason — nothing stops a second switch from running on top of the first — so the lock came
   first: one per room, refused rather than queued, at the manager chokepoint every door already

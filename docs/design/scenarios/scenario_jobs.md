@@ -2,8 +2,11 @@
 
 **Status: DESIGN — council-decided scope, implementation pending** (board PROD-18 round 2,
 decisions 9–10, owner paste 2026-10-06; bridge keeper position taken as the starting point).
-Implementation: **SCN-19** (this document is its spec). Voice's durable-job design is reviewed
-against this document before SCN-19 starts; the two must meet at §8. Cut: **`catalog-v1.12.0`**
+Implementation: **SCN-19** (this document is its spec). **Consumer review folded in
+(2026-10-06, SCN-19 intake):** the voice keeper approved with changes — the four asks are
+in §5.1 (what `success` means on a `202`), §5.4 (the `connected` / `keepalive` bodies and
+whether `max_duration_ms` is the catalog's number), §6.4 (what a dead stream means: reconnect,
+not "lost") and §8 (the four open points answered); the two designs meet at §8. Cut: **`catalog-v1.12.0`**
 (minor, additive; CORE-12 stays at 1.13.0). Siblings: [`../confirmation_timing.md`](../confirmation_timing.md)
 (tiers 1–2, `max_duration_ms` — the ceiling a job is bounded by) and the as-built scenario
 spec [`scenario_system_redesign.md`](scenario_system_redesign.md) §7 (the reconciler this
@@ -194,7 +197,7 @@ closes (the manager's shutdown signal). §6 tells the consumer what that means.
 | Case | Status | Body |
 |---|---|---|
 | `wait: true` (default) — the chain ran to its end | `200` | `CanonicalActionResponse` exactly as today, plus `job_id` inside `state`: `{"success": true, "device_id": "scenario_manager_living_room", "capability": "scenario", "action": "set", "state": {"scenario": "movie_zappiti", "job_id": "j-…", "powered_off": ["streamer"], "failures": []}, "error": null, "no_op": false}`. `success` is `false` when `failures` is non-empty (today's rule). |
-| `wait: false` — accepted | **`202`** | `{"success": true, "device_id": "scenario_manager_living_room", "capability": "scenario", "action": "set", "state": {"scenario": "music_auralic", "job_id": "j-…", "max_duration_ms": 61500}, "error": null, "no_op": false}` — `state.scenario` is the room's scenario **at acceptance** (the chain has not run); `max_duration_ms` is tier 2's published ceiling for the target (`none`'s for a stop). |
+| `wait: false` — accepted | **`202`** | `{"success": true, "device_id": "scenario_manager_living_room", "capability": "scenario", "action": "set", "state": {"scenario": "music_auralic", "job_id": "j-…", "max_duration_ms": 61500}, "error": null, "no_op": false}` — `state.scenario` is the room's scenario **at acceptance** (the chain has not run); `max_duration_ms` is tier 2's published ceiling for the target (`none`'s for a stop). **`success: true` on a `202` means ACCEPTED, not done** — the job was created and the lock taken; whether the chain succeeded is only ever said by the terminal event or `GET /scenario/jobs/{id}` (`job_state`). A consumer never speaks a result from the `202`. |
 | already at target, no job running | `200` | as today with `no_op: true`; no job, no event. |
 | a job is running in the room | **`409`** | `{"success": false, "device_id": "…", "capability": "scenario", "action": "set", "state": null, "error": {"code": "job_in_progress", "message": "a scenario job is running in room 'living_room' (job j-…, switch → movie_zappiti)", "job_id": "j-…"}}` |
 | unknown scenario / wrong room / unbound role | `404` / `400` / `409` | unchanged (`unknown_scenario`, `scenario_room_mismatch`, `no_active_scenario`, …). |
@@ -240,6 +243,31 @@ The transport is the existing SSE manager: one `data:` line per event carrying J
 event type embedded as `eventType`, an `id:` of epoch milliseconds, a `connected` event on
 subscribe, a `keepalive` roughly every second of silence. Job events are **additional event
 types on this channel**; nothing existing is removed or renamed.
+
+**The two housekeeping events, exactly as the manager emits them today** (so an adapter
+need not reverse-engineer them; `timestamp` here is the bridge's local-clock
+`datetime.now().isoformat()` — no `Z`, no offset — unlike the job events' UTC stamps):
+
+```
+id: 1759764672418
+data: {"eventType":"connected","message":"Connected to scenarios channel","timestamp":"2026-10-06T18:31:12.418532"}
+
+id: 1759764673419
+data: {"eventType":"keepalive","timestamp":"2026-10-06T18:31:13.419104"}
+```
+
+`connected` is the first frame of every stream (once); `keepalive` is sent after each ~1 s
+with nothing to deliver. Both are to be ignored for job state (§6.6); a stream with no frame
+of any kind for ~5 s is dead (§8 d).
+
+**Is `state.max_duration_ms` on the `202` always the catalog-published value?** Yes — the
+bridge computes it with the same function that builds the catalog (`scenario_ceiling_ms` /
+`deactivate_ceiling_ms` over the same config), so for `set(S)` it equals the golden's
+`max_duration_ms` for S and for a stop it equals `none`'s; a consumer that already holds the
+catalog may use either number, they are the same. The one caveat is `graceful: false` (§4,
+REST only — never reachable through the canonical endpoint): the field still carries the
+published number, but that job may exceed it, because the published ceiling prices a
+*graceful* teardown. A consumer on the canonical surface never meets the caveat.
 
 ```
 data: {"eventType":"scenario_job_started","job_id":"j-living_room-20261006T153112Z-7f3a","room_id":"living_room","kind":"switch","target":"movie_zappiti","from":"music_auralic","source":"canonical","max_duration_ms":61500,"timestamp":"2026-10-06T15:31:12.418Z"}
@@ -303,9 +331,15 @@ removed, nothing re-typed → **minor**.
 4. **The terminal event always arrives, or the stream ends.** The bridge never leaves a job
    `running` while alive: the executor's exceptions are caught per step, the terminal
    notification runs after the chain regardless of failures. The only way to see no terminal
-   event is the bridge going away — then the SSE closes (the manager's shutdown path) and
-   keepalives stop; a consumer whose stream dies treats the job as lost (restart → `404
-   job_unknown`) and speaks accordingly.
+   event on a *live* stream is the bridge going away. **A closed or dead stream is not, by
+   itself, a lost job**: the bridge also closes a stream it decides to drop (§6.7, a slow
+   consumer) and a network blip closes one too, with the job still running. A consumer whose
+   stream closes or goes silent (no frame of any kind for ~5 s) **reconnects and `GET`s
+   `/scenario/jobs/{id}`** — the record is the truth and carries the terminal state if the
+   event was missed in between. A job is **lost only on `404 job_unknown`** (the bridge
+   restarted and forgot it, §3) **or when the bridge cannot be reached at all** (connection
+   refused through the reconnect backoff); then the consumer speaks a failure and reads
+   `GET /scenario/state` for what is actually active (§8).
 5. **Timing.** `scenario_job_started` is emitted within the request; the first `scenario_step`
    follows within the first step's `pre_delay_ms` (0 on every first step today). The
    terminal event arrives within the job's `max_duration_ms` **of the bridge's own waiting**
@@ -330,8 +364,9 @@ Three distinct answers, each at its level:
   exception, SCN-17 dispatch timeout, eMotiva DRV-39 fail-closed refusal) or `not_confirmed`
   (feedback gate timed out); the chain continues (today's semantics). The terminal event's
   `job_state: failed` and `failures[]` summarise; `GET /scenario/jobs/{id}` has every step.
-- **Lost**: no terminal event, stream closed → the bridge died or was restarted; `GET` →
-  `404 job_unknown`; `GET /scenario/state` says what is active now.
+- **Lost**: the consumer reconnected after a closed or dead stream (§6.4) and `GET
+  /scenario/jobs/{id}` answered `404 job_unknown` (the bridge restarted), or the bridge
+  cannot be reached at all; `GET /scenario/state` says what is active now.
 
 A `wait: true` caller sees the same facts folded into the synchronous response (`success`,
 `failures`), as today.
@@ -352,15 +387,25 @@ working"**, and «stop» to a **new job**. Against this design:
 | Watchdog: `max_duration_ms × 1.25 + 2 s`; on expiry with the stream alive → `GET /scenario/jobs/{id}`, speak from `state`. | §6.5; §5.3. |
 | Second command for the same room mid-job → "still working" (locally, no request) — or send it and map `409 job_in_progress` to the same phrase. | §4 idempotency table; §5.1 `409` body carries `error.job_id`. |
 | «Stop» → a new job (`scenario.off`, `wait:false`) once the running job is terminal; mid-job it is the `409` above. | §4; `none`'s `max_duration_ms` (29 000 today) bounds it. |
-| Voice restart mid-job: re-subscribe, `GET /scenario/jobs/{id}` for the ids it remembers; `404 job_unknown` → the bridge restarted too → spoken failure + `GET /scenario/state`. | §3 lifetime; §5.3. |
+| Voice restart mid-job: re-subscribe, `GET /scenario/jobs/{id}` for the ids it remembers. `404 job_unknown` → the bridge restarted too; voice **does not speak a bare failure** — it follows with `GET /scenario/state` and speaks the room's actual state (what is active, or that nothing is). | §3 lifetime; §5.3; §6.4. |
+| Stream closed or silent ~5 s while a job runs → reconnect (backoff below) and `GET /scenario/jobs/{id}` on every reconnect; the job is lost only on `404` or when the bridge is unreachable. | §6.4; §6.7. |
 | Reading `scenario_step` for narration is optional; phrases key off `device_id` + `status` only (device names come from the catalog's `names`, never from the event). | §5.4 — events carry ids, not words (the language-data convention: nouns live in the catalog). |
 
-**Open points for voice** (to settle in its design review, not here): (a) whether it
-narrates steps at all in the first cut or only acknowledgement + terminal; (b) how many
-remembered `job_id`s it reconciles after its own restart (one per room is enough); (c)
-whether a `409` mid-job is answered locally or by sending anyway — the bridge supports both;
-(d) the adapter's reconnect backoff — the bridge sends keepalives every ~1 s, so a 5 s
-silence is a dead stream.
+**Open points for voice — answered by its review (2026-10-06, voice keeper,
+approve-with-changes):**
+
+- **(a) Narration.** First cut = acknowledgement on the `202` + the terminal event only.
+  `scenario_phase` / `scenario_step` are consumed as **liveness** (the stream is alive and
+  the job is moving), never spoken; step narration is a later cut.
+- **(b) Remembered jobs.** One durable record per room; a voice restart reconciles at most
+  one `job_id` per room.
+- **(c) The mid-job `409`.** Answered **locally** ("still working") when voice owns the
+  room's running record; when it does not (another client started the job), the request is
+  sent and the `409` is mapped to the same phrase via `error.job_id` — which voice may then
+  adopt as the room's record and follow.
+- **(d) Reconnect.** Backoff 1-2-4-8 s, capped at 30 s, with jitter; a stream silent for
+  ~5 s is dead; **`GET /scenario/jobs/{id}` on every reconnect while a record is running**
+  (§6.4).
 
 ## 9. Contract classification and the guide
 
