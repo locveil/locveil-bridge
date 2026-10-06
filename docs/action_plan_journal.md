@@ -28,6 +28,19 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — PROD-18 intake: VWB-33 + VWB-34 narrowed and re-tagged `[release]`; VWB-46 +
+  VWB-47 filed.** The board's round-1 decisions arrived as the decision of record, so the two
+  July texts were reconciled against the repo before any design started. Three claims fell:
+  "some fleet fields carry no labels" — false, all 122 fields are labelled at catalog-v1.10.0
+  and the real gaps are nine enum values on the two IR by-value inputs (no label slot in the
+  projection) plus the exempted bare power pair; "progress narration uses the SSE stream" —
+  optimistic, the scenarios channel carries only switched/shutdown events; and the convention's
+  "candidate home" — the machine rule goes into the pinned catalog guide, the ownership prose
+  landed in commons today (`process/language-data.md`). Tier 3 left VWB-34 entirely: the
+  owner's round-2 answer, which landed while this intake ran, makes it its own arc with its own
+  cut, so VWB-47 carries that scope and VWB-34 keeps tiers 1 and 2. VWB-46 is the one batched
+  `catalog-v1.11.0` cut both designs implement into. Ledger only — no code, no contract.
+
 - **2026-10-06 — OPS-28 DONE: the side door is closed.** PROD-19 asked one question of two
   repos — what to do about public GitHub issues now that the reports pipeline is the intake —
   and the owner answered it for all four public repos at once: disable the tab. Bridge had

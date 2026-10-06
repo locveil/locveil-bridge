@@ -636,9 +636,56 @@ endpoint).
   - **Sequence-form caveat — RESOLVED 2026-07-04 (VWB-17 DONE):** the canonical endpoint now routes `sequence`-form actions (shared `CapabilityAction.expand()` — per-step param translation, inter-step `delay_after_ms`, mid-sequence failure naming the step). Crossover fixtures may cover sequence-form actions freely.
   - Spec: `locveil-voice/docs/design/mqtt_integration.md` §14.
 
-- [ ] **VWB-33** `[P1]` `[deferred]` — **Harmonise language-data contribution across all devices/capabilities — design** (`design-then-implement`; filed 2026-07-10 off the chat analysis of how devices contribute language-specific data to voice). **Post-release, board-level cross-repo (owner decision 2026-07-10 — re-tagged out of `[release]`):** the convention is **half the voice side's** (the verbs-are-donations rule binds their repo too), so this is a **board-as-outbox cross-repo design session** — one of the first tasks *after* the Locveil board is established, alongside VWB-34 (both are board-delegated cross-repo designs; `locveil-commons/process/` is the candidate shared-spec home). NOT a release-1 gate. The analysis established the ownership split — **the bridge catalog contributes the NOUNS** (device `names` ru/en/de, device/room `aliases`, field `labels`, enum `{wire, canonical, labels}` value labels — the voice side's matching surfaces: it matches utterance words against `labels` in the active locale and posts `canonical`), **the voice donations contribute the VERBS** (phrases/lemmas per handler method; `CatalogAction` deliberately carries NO labels), and **group tokens** (`light`/`cover`/`fan`…) are unlocalized identifiers whose spoken words live in donation choice surfaces. Found inconsistencies to resolve by design: **(1)** uneven label-language coverage (kitchen hood field/value labels are ru/en only; HVAC carries full ru/en/de; some fleet fields carry no labels at all) — decide the required set (ru/en/de?) and whether a guard enforces it (`check`-style test or catalog-build warning); **(2)** no recorded CONVENTION for which surfaces must be localized vs must stay canonical tokens — write it down (candidate home: `contracts/README.md` in user-facing voice + the capability-map authoring guidance), including the verbs-are-donations rule so nobody adds action labels to the catalog; **(3)** `CatalogParam.description`/`unit` are English-only prose — decide: keep as developer-facing (documented as such) or localize; **(4)** device `aliases` coverage is sparse and ru-only — decide whether aliases become part of the authoring checklist for new devices; **(5)** audit the full fleet against the decided convention and file the implementation follow-up(s) with the gap list. Deliverable: the design/convention document + filed follow-ups (a finding is not scope until it has an ID). Coordinate with the voice side (the convention is half theirs — donations); candidate shared-spec home per the Domovoy arc (`locveil-commons/process/`) noted, not required for release 1.
+- [ ] **VWB-33** `[P1]` `[release]` `DOING` — **Language-data contribution convention — design**
+  (`design-then-implement`; filed 2026-07-10 off the chat analysis of how devices contribute
+  language-specific data to voice; re-tagged `[deferred]` the same day — board-level cross-repo).
+  **Board PROD-18 member (lead ID); council round 1 DECIDED by the owner 2026-10-06 — the
+  "Round 1 DECIDED" paragraph of `../locveil-commons/board/BOARD.md` PROD-18 is the decision of
+  record and binds this design.** *(Intake reconciliation 2026-10-06: the July text's "some fleet
+  fields carry no labels at all" is FALSE at catalog-v1.10.0 — all 122 fields are labelled (101
+  ru/en, 21 ru/en/de); the real gaps are the 9 enum values of the two IR by-value selects
+  (`mf_amplifier.input` × 7, `upscaler.input` × 2) whose projection has no label slot, plus the
+  78 bare `power` on/off values the owner exempted. The convention's home is no longer "candidate
+  `contracts/README.md`": the MACHINE rule lives in the pinned guide `contracts/catalog/
+  catalog-contract.md`, the OWNERSHIP prose in commons `process/language-data.md` (IMPL-27,
+  landed) — this design references it, never duplicates it.)* **Decisions designed to (not
+  reopened):** label floor ru+en required / de optional / consumer may fall back to ru; every
+  enum value carries labels except the bare `power` on/off pair; the 9 gaps close via a label
+  slot on by-value selects; a check-style test over the committed golden is the guard; the
+  guide gains a "Localization (since contract v1.11)" section whose exact text this design
+  drafts; `description` stays developer English and `unit` a symbol (documented as such);
+  aliases are an authoring-checklist item, ru-first, no minimum; the HVAC `vane` field label
+  «жалюзи» → **«заслонка»** (the cabinet rollers keep their «жалюзи» alias), `widevane`
+  renamed consistently (this design proposes the string); no German cosmetics. **Deliverable:**
+  a design doc under `docs/design/` (`language_data_convention`, linked here when it lands) — the
+  convention, the verified audit numbers, the guard specification, the by-value label slot
+  (model + config shape + the 9 migrated values), the louver rename, the authoring-checklist
+  text, the guide section verbatim. Implementation rides **VWB-46** (the `catalog-v1.11.0`
+  cut, shared with VWB-34). Closes when the design is committed — council-decided,
+  implementation pending.
 
-- [ ] **VWB-34** `[P2]` `[deferred]` — **Publish confirmation-timing in the contract — design** (`design-then-implement`; filed 2026-07-10 off the DRV-29 post-mortem chat: "your HTTP timeout must exceed 15 s" is contract information currently delivered out-of-band in a handover note — the same coupling class DRV-29 fixed, one layer up: retune a gate to 30 s and voice's timeouts fire again with no signal in the pinned catalog). **Cross-repo** — intended for delegation to the board once board-as-outbox lands (Domovoy arc); the voice side co-owns the consumption design (example on the table: implement scenario startup as a *durable action* on the voice side). Three tiers established in the chat analysis, to be confirmed/refined by the design: **(1) capabilities** — publish a client-meaningful optional `confirm_timeout_ms` per capability (present only when gated), derived from but NOT exposing the internal `gate` object (the gate is implementation — reconciler polling cadence; the latency promise is contract — keeps internals re-tunable without a re-pin); consumers: voice sizes per-capability HTTP timeouts and can auto-choose `wait:false` + optimistic speech for slow capabilities instead of hardcoding device lists; the UI's HvacPanel shows an honest progress expectation; extends VWB-24's zero-round-trip philosophy (catalog says what's valid → now also what to expect). **(2) scenarios** — a static estimate would lie (switch duration is diff-dependent: warm shared devices ≈ seconds, cold start ≈ the critical path); the honest publishable fact is an **upper bound** `max_duration_ms`, mechanically derivable from the cold-start plan (step gates + IR delays along the critical path) — a ceiling for client timeouts, never exceeded, usually beaten; progress narration uses the existing SSE state stream, not a number. **(3) async composites** — the fully clean answer for long-running composites is the async-job pattern (`202 Accepted` + progress events + completion event, dissolving the timeout question; the durable-action idea lives here) — a real API redesign touching voice + UI both, deliberately the design's decision whether/when, NOT presumed. Contract cost when implemented: catalog model + derivation + golden/openapi re-pin + voice re-pin — batch with an adjacent deliberate contract cut (OPS-16 tagging discipline applies). Deliverable: design doc + filed implementation follow-up(s).
+- [ ] **VWB-34** `[P1]` `[release]` `DOING` — **Confirmation timing published in the contract —
+  design** (`design-then-implement`; filed 2026-07-10 off the DRV-29 post-mortem: "your HTTP
+  timeout must exceed 15 s" was contract information delivered out-of-band — retune a gate and
+  voice's timeouts fire with no signal in the pinned catalog). **Board PROD-18 member; council
+  round 1 DECIDED by the owner 2026-10-06 (the board entry's "Round 1 DECIDED" paragraph binds
+  this design); round 2 DECIDED later the same day (timeout policy + tier-3 sequencing).**
+  *(Intake reconciliation 2026-10-06: the July text's "progress narration uses the existing SSE
+  state stream" is OPTIMISTIC — the scenarios channel carries only switched/shutdown events, no
+  per-step stream exists; and TIER 3 (async job) is NOT in this design — the owner's round-2
+  answer makes it its own arc, filed as **VWB-47**.)* **Decisions designed to (not reopened):
+  tier 1** = optional `confirm_timeout_ms` per capability, present iff the capability's gate
+  declares a poll timeout and equal to it (absent = the 500 ms default echo window; `delay_ms`
+  stays unexposed); **tier 2** = optional `max_duration_ms` on each scenario value label,
+  derived from the cold plan (sequential execution ⇒ the sum is the ceiling) — the design
+  specifies the derivation exactly, including the `build_plan` state-override variant, and
+  computes today's numbers; both land in the minor `catalog-v1.11.0` (CORE-12 shifts to the
+  next); the guide gains a "Timing (since contract v1.11)" section whose exact text this design
+  drafts; voice sizes requests from the field, the config value is the fallback (the speech
+  policy is voice's — round-2 decision 8); the HvacPanel progress expectation is a separate
+  later UI task. **Deliverable:** a design doc under
+  `docs/design/` (`confirmation_timing`, linked here when it lands). Implementation rides
+  **VWB-46**; tier 3 continues in **VWB-47**. Closes when the design is committed.
 
 - [ ] **VWB-39** `[P2]` `[deferred]` — **Descriptor conformance test — the bridge-side consuming
   surface locked to the OWNED convention (PROD-15 bridge delegation, item 4; the VWB-37 pattern).**
@@ -664,6 +711,50 @@ endpoint).
   satellite's first conforming descriptor (the PROD-20 chain). *(Dep line re-anchored 2026-07-14,
   DOC-16.)* **Redefinition OWNER-CONFIRMED 2026-10-05** ("VWB-39 redefinition is fine,
   confirmed" — relayed by the PROD-28 coordinator; the scope above stands as reconciled).
+
+- [ ] **VWB-46** `[P1]` `[release]` — **Catalog `catalog-v1.11.0` — the PROD-18 round-1 cut
+  (implementation of VWB-33 + VWB-34).** Filed 2026-10-06 at the PROD-18 intake; designs: the
+  VWB-33 + VWB-34 design docs under `docs/design/` (linked here when they land). ONE batched minor cut,
+  ONE voice re-pin (the board's binding condition). Scope, in order: **(1)** by-value select
+  label slot — `CapabilitySelect.by_value` values gain optional `labels` (`LocalizedName`), the
+  projection emits them on the `set(value)` param table; the 9 values on `mf_amplifier.input` /
+  `upscaler.input` get their ru/en strings from the design; **(2)** louver labels —
+  `MitsubishiHvac.json` `vane` «жалюзи» → «заслонка», `widevane` → the design's string; **(3)**
+  the localization guard — check-style tests over the committed golden (`test_contracts_golden.py`):
+  every device/room name and every field label carries ru+en; every enum value carries ru+en
+  labels except the bare `power` on/off pair; `unit` is a symbol; **(4)** tier 1 —
+  `CatalogCapability.confirm_timeout_ms` (optional int), emitted iff `gate.poll_timeout_ms`
+  is set, equal to it; **(5)** tier 2 — `CatalogValueLabel.max_duration_ms` (optional int) on
+  the scenario `set(value)` param + field tables, from the cold-plan derivation (teardown ceiling
+  + activation ceiling, state-override plans) implemented beside `build_plan` and exposed through
+  the scenario proxy to the catalog builder; a unit test pins the derivation on a fixture
+  topology; **(6)** guide sections "Localization (since contract v1.11)" + "Timing (since
+  contract v1.11)" — the designs' texts verbatim; **(7)** `CONTRACT_VERSION` → `1.11.0`,
+  golden + `openapi.json` + `backend/openapi.json` regenerated, STAMP, lightweight tag on the
+  landing commit, registry row; **(8)** UI types regen (`config-ui-stays-functional`: `npm run
+  gen:api-types`, `check`, `build` — no component change required; the HvacPanel expectation is
+  a separate later UI task). **Out:** tier 3 (VWB-47), German cosmetics, the vane/widevane
+  crossover fixtures (voice-side, separate), the in-flight scenario lock (tier-3 arc). `contracts:`
+  verdict at completion = `catalog-v1.11.0` cut (minor), re-pin owed: voice, commons.
+  **Open for the owner before the cut** (recorded in the timing design §6): whether the
+  eMotiva driver's readiness hold (DRV-39, up to 15 s inside dispatch, invisible to the plan)
+  enters the tier-2 sum.
+
+- [ ] **VWB-47** `[P1]` `[release]` — **Scenario job API (tier 3) — design.** Filed 2026-10-06
+  as the PROD-18 tier-3 placeholder; the owner's round-2 answer landed the same day (board
+  PROD-18 "Round 2 DECIDED", decisions 9–10): **build now, as its own arc** — bridge job-API
+  design (this task) → voice durable-job design (both reviewed) → implementation on both sides →
+  the WB7 sitting (measures the real switch/stop times; today's figures are ceilings) →
+  `catalog-v1.12.0` → the second voice re-pin; the one-cut condition is waived for tier 3 only.
+  **Shape riders accepted by the owner (design to them):** one job per room, a second request
+  while one runs → 409 (the in-flight scenario lock missing today — a retry after voice's 20 s
+  timeout double-runs plans); no cancel in the minimum — «stop» is a new job; device-level long
+  actions stay synchronous under tier 1; step events over SSE (the scenarios channel today
+  carries only switched/shutdown — the step stream is new; voice adds an SSE adapter); `GET
+  /scenario/jobs/{id}` for pollers and the UI; the UI progress stepper is a later task.
+  Sequenced AFTER VWB-46 lands (`catalog-v1.11.0`). Deliverable: a design doc under
+  `docs/design/scenarios/`; the implementation task(s) filed at its completion. Pointer from
+  the VWB-34 timing design (its tier-3 section).
 
 ### UI — config-ui
 
