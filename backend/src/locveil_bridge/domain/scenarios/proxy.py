@@ -15,6 +15,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from locveil_bridge.domain.scenarios.jobs import ScenarioJob
 from locveil_bridge.domain.scenarios.models import ScenarioDefinition
 from locveil_bridge.domain.scenarios.reconciler import deactivate_ceiling_ms, scenario_ceiling_ms
 from locveil_bridge.domain.scenarios.service import ScenarioManager
@@ -167,8 +168,7 @@ class ScenarioProxy:
 
     # ---- activation (the `scenario` capability) ----------------------------
 
-    async def activate(self, room_id: str, scenario_id: str) -> Dict[str, Any]:
-        """``scenario.set(<id>)`` — activate/switch the room's scenario (reconciler diff)."""
+    def _check_target(self, room_id: str, scenario_id: str) -> None:
         defn = self.scenario_manager.scenario_definitions.get(scenario_id)
         if defn is None:
             raise ScenarioProxyError(f"Scenario '{scenario_id}' not found", "unknown_scenario")
@@ -178,11 +178,32 @@ class ScenarioProxy:
                 f"not '{room_id}'",
                 "scenario_room_mismatch",
             )
-        return await self.scenario_manager.switch_scenario(scenario_id)
 
-    async def deactivate(self, room_id: str) -> Dict[str, Any]:
-        """``scenario.off`` — power the room's scenario down (explicit user action)."""
-        return await self.scenario_manager.deactivate(room_id)
+    async def activate(self, room_id: str, scenario_id: str, *,
+                       source: str = "canonical") -> Dict[str, Any]:
+        """``scenario.set(<id>)`` with ``wait: true`` — activate/switch the room's
+        scenario (reconciler diff) and return when the chain ended. Raises
+        ScenarioJobInProgress (SCN-19) when a job is running in the room."""
+        self._check_target(room_id, scenario_id)
+        return await self.scenario_manager.switch_scenario(scenario_id, source=source)
+
+    async def start_activate(self, room_id: str, scenario_id: str, *,
+                             source: str = "canonical") -> Optional[ScenarioJob]:
+        """``scenario.set(<id>)`` with ``wait: false`` — accept the job and return it
+        (None = already at the target, nothing started)."""
+        self._check_target(room_id, scenario_id)
+        return await self.scenario_manager.start_switch(scenario_id, source=source)
+
+    async def deactivate(self, room_id: str, *, source: str = "canonical") -> Dict[str, Any]:
+        """``scenario.off`` with ``wait: true`` — power the room's scenario down
+        (explicit user action) and return when the chain ended."""
+        return await self.scenario_manager.deactivate(room_id, source=source)
+
+    async def start_deactivate(self, room_id: str, *,
+                               source: str = "canonical") -> Optional[ScenarioJob]:
+        """``scenario.off`` with ``wait: false`` — accept the stop job and return it
+        (None = the room is idle, nothing started)."""
+        return await self.scenario_manager.start_stop(room_id, source=source)
 
     # ---- WB-card execution (no echo-wait; REST keeps its own dispatch) -----
 

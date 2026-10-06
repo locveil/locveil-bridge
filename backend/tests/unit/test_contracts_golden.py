@@ -19,6 +19,7 @@ the shape of the pinned set (`STAMP_ARTIFACTS` — the guide in, the folder READ
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -174,7 +175,7 @@ def test_guide_holds_the_normative_text_and_the_readme_points_at_it():
     """The split's two halves stay put: param semantics + the versioning rule live in
     the pinned guide; the unlocked README links to it instead of restating it."""
     guide = (CONTRACTS / "catalog-contract.md").read_text(encoding="utf-8")
-    for heading in ("## Param semantics", "## Localization", "## Timing", "## Versioning"):
+    for heading in ("## Param semantics", "## Localization", "## Timing", "## Jobs", "## Versioning"):
         assert heading in guide, f"catalog-contract.md lost its {heading!r} section"
     readme = (CONTRACTS / "README.md").read_text(encoding="utf-8")
     assert "(catalog-contract.md)" in readme
@@ -375,3 +376,29 @@ def test_contract_v111_louver_labels_are_zaslonka():
         assert caps["vane"]["fields"][0]["labels"]["ru"] == "заслонка"
         assert caps["widevane"]["fields"][0]["labels"]["ru"] == "заслонка по горизонтали"
     assert _device(golden, "cabinet_roller_left")["aliases"]["ru"] == ["жалюзи"]
+
+
+# --- SCN-19 (contract v1.12): the cut's claim — the golden did not move ----------------
+# The job API is operations, schemas, events and one error code: the golden carries no
+# job data and no version, so catalog-v1.12.0 re-enumerates the v1.11.0 golden
+# byte-for-byte. Guarded two ways: the content hash (always), the tagged bytes (where
+# the checkout has the tag).
+
+V1_11_0_GOLDEN_HASH = "4deb84ae88da6caa"
+
+
+def test_contract_v112_golden_hash_is_v111s():
+    golden = _golden()
+    stamp = json.loads((CONTRACTS / "STAMP.json").read_text(encoding="utf-8"))
+    assert golden["version"] == V1_11_0_GOLDEN_HASH, "the golden moved — the v1.12 cut promised it would not"
+    assert stamp["catalog_version"] == V1_11_0_GOLDEN_HASH
+
+
+def test_contract_v112_golden_bytes_identical_to_the_v111_tag():
+    shown = subprocess.run(
+        ["git", "-C", str(REPO), "show", "catalog-v1.11.0:contracts/catalog/catalog.golden.json"],
+        capture_output=True,
+    )
+    if shown.returncode != 0:
+        pytest.skip("catalog-v1.11.0 is not in this checkout (shallow clone) — the hash test above stands")
+    assert shown.stdout == (CONTRACTS / "catalog.golden.json").read_bytes()

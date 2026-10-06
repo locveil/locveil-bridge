@@ -336,32 +336,6 @@ entry. One ledger, **every ID in exactly one file**. The dated narrative lives i
   cross-talk, both WB «Сценарии» cards correct, in-room-only transition diffs).
 
 
-- [ ] **SCN-19** `[P1]` `[release]` — **Scenario jobs — the tier-3 async switch API (implementation).**
-  Filed 2026-10-06 at VWB-47's completion (`design-then-implement`); spec:
-  [`docs/design/scenarios/scenario_jobs.md`](design/scenarios/scenario_jobs.md) (board PROD-18 round 2,
-  decisions 9–10). **Starts after voice's durable-job design has been reviewed against the spec's
-  §8** (the two meet on the `202` shape, the event field names, "terminal always arrives or the
-  stream ends", the `409` body). Scope = spec §11 step 2: `domain/scenarios/jobs.py` (`ScenarioJob`
-  record, per-room registry: running + last 20), the per-room `asyncio.Lock` acquired non-blocking
-  at the `ScenarioManager` chokepoint (switch / deactivate / force_reconcile; `POST /reload` waits
-  bounded), executor step hooks at the two reconciler points, the SSE producers in bootstrap
-  (`scenario_job_started` / `scenario_phase` / `scenario_step`; `scenario_switched` /
-  `scenario_shutdown` extended with `job_id`, `job_state`, `duration_ms`, `failures`,
-  `powered_off`), the canonical endpoint's `wait:false → 202 {job_id, max_duration_ms}` and
-  `409 job_in_progress` (`CanonicalErrorCode` + `CanonicalError.job_id`), REST `wait` + `409`,
-  `GET /scenario/jobs/{id}` (404 `job_unknown` after restart) + `GET /scenario/jobs?room=`, the
-  event payload models via `OPENAPI_EXTRA_MODELS`, the SSE manager's non-blocking put (slow
-  consumers dropped), tests 1–8 of spec §10 (lock vs REL-3 ordering, event order, 409 on every
-  door, the `wait` matrix, restart, slow consumer, reload, contract). Hexagonal: registry + lock in
-  the domain, events via the existing observer port, zero new import-linter exceptions.
-  **No contract cut in this task** — `CONTRACT_VERSION` moves at step 5 after the WB7 sitting
-  (spec §10: cold starts, warm switches, stops per scenario vs the published ceilings; the owner's
-  one-page checklist; a measured bridge-wait above a ceiling blocks the cut) → `catalog-v1.12.0`
-  (golden byte-identical; guide "Jobs (since contract v1.12)" verbatim from spec §9; re-pin owed:
-  voice both copies, commons). The UI stepper is filed as its own UI task at completion.
-  `config-ui-stays-functional`: openapi regen + UI/plugin types in the same change; the scenario
-  page handles the new `409`.
-
 ### VWB — Voice-integration + native WB onboarding
 
 **Context (the P3.7 push — design narrative preserved from the former phase section):**
@@ -826,6 +800,16 @@ endpoint).
   `../locveil-commons/docs/design/ui/` (method + divergence-list), `ui-kit-v1` (0.1.x, the
   workbench identity for contrast), `remote.png`. `config-ui-stays-functional` gates apply to
   every implementation follow-up.
+
+- [ ] **UI-24** `[P2]` `[deferred]` — **Scenario page progress stepper.** Filed 2026-10-06 at
+  SCN-19's completion (board PROD-18 decision 10: "the UI progress stepper is a later task"). The
+  scenario page reads the room's running job — `GET /scenario/jobs?room=` on mount, then
+  `scenario_phase` + `scenario_step` on `/events/scenarios` filtered by `job_id` — and shows
+  "step 3 of 8 — processor: input → source1" with the step's status, the terminal
+  `scenario_switched` / `scenario_shutdown` closing it; a `409 job_in_progress` (handled today as
+  a log line) opens the same stepper on the running job. Types are already generated
+  (`ScenarioJob`, `ScenarioStepEvent`, …, contract v1.12); design detail
+  [`scenario_jobs.md`](design/scenarios/scenario_jobs.md) §5.3–§5.4, §11.
 
 ### OPS — Docker / CI-CD / deploy / ops
 

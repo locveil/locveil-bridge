@@ -44,10 +44,20 @@ client is regenerated without a Python dependency.
 | `GET` | `/scenario/definition` | All scenarios — list of `ScenarioDefinition`. |
 | `GET` | `/scenario/definition/{id}` | One scenario's typed definition. |
 | `GET` | `/scenario/{id}/layout` | Per-scenario layout manifest (the UI uses one tab per active scenario). |
-| `POST` | `/scenario/start` | Activate a scenario — runs `build_plan` against the all-devices-off baseline. |
-| `POST` | `/scenario/switch` | Switch the active scenario — runs `build_plan` against current assumed state and emits only the deltas. |
-| `POST` | `/scenario/shutdown` | Deactivate — runs the power-off plan. |
+| `POST` | `/scenario/start` | Activate a scenario — runs `build_plan` against the all-devices-off baseline. Runs as the room's **scenario job**: `wait: true` (default) returns when the chain has finished, `wait: false` returns `202` with the accepted job's id and ceiling. |
+| `POST` | `/scenario/switch` | Switch the active scenario — runs `build_plan` against current assumed state and emits only the deltas. Same job semantics as `start`. |
+| `POST` | `/scenario/shutdown` | Deactivate — runs the power-off plan, as a `stop` job. |
+| `GET` | `/scenario/jobs/{job_id}` | One scenario job: its phases, every step with its status, failures and result. Jobs are held in memory (the running one plus the last 20 per room); after a restart every earlier id answers `404 job_unknown`. |
+| `GET` | `/scenario/jobs?room=` | The room's running job and its recent ones (without `room`: every room) — for pollers and for the page after a reload. |
 | `POST` | `/scenario/role_action` | Send an action to a device by *role* (`source` / `display` / `audio`) on the active scenario rather than by id. The Harmony idea: "volume up the active activity's audio" without the caller knowing which device that is. |
+
+**One job per room.** A scenario request is one run of the room's chain. While a job runs,
+every further scenario request for that room — on this surface, on the canonical endpoint
+(`scenario.set` / `scenario.off`, where `wait: false` likewise returns `202`), or from the
+Wirenboard card — is refused with `409` and the code `job_in_progress`, naming the running
+job; nothing is queued, so a repeated request never runs the chain twice and a stop during
+a switch is a refusal, not an interruption. There is no cancel: a stop is a new job after
+the running one has finished.
 
 ### Rooms
 
@@ -86,7 +96,7 @@ to forever:
 | Endpoint | Channel | Carries |
 |---|---|---|
 | `GET /events/devices` | `devices` | Device state-change + action-progress events. |
-| `GET /events/scenarios` | `scenarios` | Scenario activate / switch / deactivate events; manual-step prompts. |
+| `GET /events/scenarios` | `scenarios` | Scenario activate / switch / deactivate events (`scenario_switched` / `scenario_shutdown`, carrying the job's id, state, duration and failures) plus the job's progress: `scenario_job_started`, `scenario_phase` (a phase's planned steps), `scenario_step` (a step starting, then `done`, `failed` or `not_confirmed`). A subscriber that stops reading is dropped, never waited for. |
 | `GET /events/system` | `system` | Reload, MQTT-broker connect/disconnect, errors. |
 | `GET /events/stats` | — | Operational SSE stats (subscriber counts, queue depth). |
 | `POST /events/test` | — | Test broadcast — dev affordance. |

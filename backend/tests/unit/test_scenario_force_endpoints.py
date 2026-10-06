@@ -132,7 +132,8 @@ async def test_force_reconcile_executes_only_target_with_force_params():
     # Amp believed fully at target -> a normal activation would skip it entirely.
     sm = _manager(_devices(calls, mf_amplifier={"power": "on", "input": "aux2"}))
 
-    plan, result = await sm.force_reconcile_device("movie_appletv", "mf_amplifier")
+    plan, result, job = await sm.force_reconcile_device("movie_appletv", "mf_amplifier")
+    assert job.kind == "reconcile" and job.state == "succeeded"  # SCN-19: a forced plan is a job
 
     assert result.success and not result.failures
     assert {c[0] for c in calls} == {"mf_amplifier"}  # nobody else was commanded

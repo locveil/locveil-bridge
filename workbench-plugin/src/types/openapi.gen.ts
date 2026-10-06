@@ -286,6 +286,12 @@ export interface paths {
          *         `state.reachable` flipped False during the wait (a per-control `meta/error`
          *         flag landed, per the Wirenboard MQTT convention).
          *       - `internal_error` (500) - everything else.
+         *       - `job_in_progress` (409) - a Scenario Manager's `scenario` request while a
+         *         scenario job runs in the room; `error.job_id` names it (since contract v1.12).
+         *
+         *     On a Scenario Manager's `scenario` capability `wait: false` returns `202` with
+         *     `state.job_id` + `state.max_duration_ms`: the job is accepted, not done — follow it
+         *     via `GET /scenario/jobs/{job_id}` or the scenarios event stream.
          */
         post: operations["execute_canonical_action_devices__device_id__canonical_post"];
         delete?: never;
@@ -841,6 +847,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scenario/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Scenario Jobs
+         * @description Scenario jobs by room (since contract v1.12) — for pollers and for the UI after a
+         *     page reload ("is something running in my room?"). Jobs live in memory: after a bridge
+         *     restart the lists are empty.
+         */
+        get: operations["list_scenario_jobs_scenario_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scenario/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scenario Job
+         * @description One scenario job (since contract v1.12): its phases, every step with its status,
+         *     failures and result. The record is the truth a consumer reconciles against after a
+         *     reconnect; `404 job_unknown` for an id the bridge does not hold — every id from before
+         *     its last restart (`GET /scenario/state` says what is active now).
+         */
+        get: operations["get_scenario_job_scenario_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scenario/role_action": {
         parameters: {
             query?: never;
@@ -980,7 +1031,9 @@ export interface paths {
          * @description Switch to a different scenario.
          *
          *     This endpoint performs a transition between scenarios, handling
-         *     device state changes efficiently.
+         *     device state changes efficiently. The chain runs as the room's scenario job:
+         *     `wait: true` (default) returns when it ended, `wait: false` returns `202` with the
+         *     accepted job; a room with a running job answers `409 job_in_progress`.
          *
          *     Args:
          *         data: The switch scenario request with scenario ID and graceful flag
@@ -1014,7 +1067,8 @@ export interface paths {
          *     row is the feedback channel), driver idempotence guards are bypassed via the
          *     reserved `force` param, and toggle power claims the plan target (`assume_state`).
          *     Runs the device's chain through the normal executor (gates + polls); worst case a
-         *     poll-timeout wait, so the call can take seconds.
+         *     poll-timeout wait, so the call can take seconds. It runs as a `reconcile` job under
+         *     the room's lock: `409 job_in_progress` while another job runs there.
          */
         post: operations["force_reconcile_device_scenario__id__force_reconcile_post"];
         delete?: never;
@@ -1524,7 +1578,7 @@ export interface components {
             } | null;
             /**
              * Wait
-             * @description Wait for the value-topic echo and return post-action state (voice wants a speakable result). False = fire-and-return-current-state (the UI's mash-click mode — button presses must not serialize on echo waits).
+             * @description Wait for the value-topic echo and return post-action state (voice wants a speakable result). False = fire-and-return-current-state (the UI's mash-click mode — button presses must not serialize on echo waits). On a Scenario Manager's `scenario` capability `wait: false` returns `202` with a job to follow (since contract v1.12).
              * @default true
              */
             wait: boolean;
@@ -1565,11 +1619,17 @@ export interface components {
         /**
          * CanonicalError
          * @description Error envelope. `field` + `reason` populated for param_invalid; both optional.
+         *     `job_id` is set for `job_in_progress` only — the running job the caller may follow.
          */
         CanonicalError: {
             code: components["schemas"]["CanonicalErrorCode"];
             /** Field */
             field?: string | null;
+            /**
+             * Job Id
+             * @description For `job_in_progress`: the id of the scenario job already running in the room (follow it via GET /scenario/jobs/{job_id} or the scenarios event stream).
+             */
+            job_id?: string | null;
             /** Message */
             message: string;
             /** Reason */
@@ -1579,10 +1639,12 @@ export interface components {
          * CanonicalErrorCode
          * @description Structured error codes for the canonical endpoint. HTTP status mirrors these
          *     (see /devices/{id}/canonical responses): 404 for the three 'not supported' codes,
-         *     400 for param_invalid, 503 for device_unreachable, 500 for internal_error.
+         *     400 for param_invalid, 503 for device_unreachable, 500 for internal_error,
+         *     409 for job_in_progress (a scenario job is already running in the room; the error
+         *     names it in `job_id`).
          * @enum {string}
          */
-        CanonicalErrorCode: "device_not_found" | "capability_not_supported" | "action_not_supported" | "param_invalid" | "device_unreachable" | "internal_error" | "no_active_scenario" | "role_unbound" | "no_group_members" | "no_default_device" | "fanout_not_allowed";
+        CanonicalErrorCode: "device_not_found" | "capability_not_supported" | "action_not_supported" | "param_invalid" | "device_unreachable" | "internal_error" | "no_active_scenario" | "role_unbound" | "no_group_members" | "no_default_device" | "fanout_not_allowed" | "job_in_progress";
         /**
          * CatalogAction
          * @description A canonical action a device supports under a capability. `params` is `None` for
@@ -2155,6 +2217,11 @@ export interface components {
             executed: components["schemas"]["ReconcilePlanStep"][];
             /** Failures */
             failures: components["schemas"]["ForceReconcileFailure"][];
+            /**
+             * Job Id
+             * @description The `reconcile` job that ran the forced chain (since contract v1.12).
+             */
+            job_id?: string | null;
             /** Success */
             success: boolean;
         };
@@ -3003,6 +3070,368 @@ export interface components {
             source?: string | null;
         };
         /**
+         * ScenarioJob
+         * @description One run of a room's scenario chain: a switch, a stop or a one-device reconcile.
+         *     Kept in memory for the running job and the last 20 finished ones per room; after a
+         *     bridge restart every earlier job is unknown (`404`, `job_unknown`).
+         */
+        ScenarioJob: {
+            /**
+             * Duration Ms
+             * @description Wall time from acceptance to the terminal event.
+             */
+            duration_ms?: number | null;
+            /**
+             * Failures
+             * @description `{device, command, error}` per failed or unconfirmed step.
+             */
+            failures?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Finished At
+             * @description ISO-8601 UTC, at the terminal event.
+             */
+            finished_at?: string | null;
+            /**
+             * From
+             * @description The room's active scenario at acceptance (`none` if idle).
+             */
+            from: string;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "switch" | "stop" | "reconcile";
+            /**
+             * Max Duration Ms
+             * @description The catalog's published ceiling for the target.
+             */
+            max_duration_ms: number;
+            /**
+             * Phases
+             * @description Phases appear as they are planned.
+             */
+            phases?: components["schemas"]["ScenarioJobPhase"][];
+            /**
+             * Powered Off
+             * @description Devices the teardown powered off.
+             */
+            powered_off?: string[];
+            /**
+             * Result Scenario
+             * @description The room's active scenario after the job (`none` after a stop).
+             */
+            result_scenario?: string | null;
+            /** Room Id */
+            room_id: string;
+            /**
+             * Source
+             * @description Which door started the job.
+             * @enum {string}
+             */
+            source: "canonical" | "rest" | "wb_card";
+            /**
+             * Started At
+             * @description ISO-8601 UTC, at acceptance.
+             */
+            started_at: string;
+            /**
+             * State
+             * @description `failed` = the chain completed with at least one step failed or not confirmed.
+             * @enum {string}
+             */
+            state: "running" | "succeeded" | "failed";
+            /**
+             * Target
+             * @description The scenario id, or `none` for a stop.
+             */
+            target: string;
+        };
+        /**
+         * ScenarioJobAccepted
+         * @description The `202` body of a REST scenario request with `wait: false`.
+         */
+        ScenarioJobAccepted: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "switch" | "stop" | "reconcile";
+            /** Max Duration Ms */
+            max_duration_ms: number;
+            /** Room Id */
+            room_id: string;
+            /** Target */
+            target: string;
+        };
+        /**
+         * ScenarioJobInProgressDetail
+         * @description The `detail` of a REST `409` when a job is running in the room.
+         */
+        ScenarioJobInProgressDetail: {
+            /**
+             * Code
+             * @default job_in_progress
+             * @constant
+             */
+            code: "job_in_progress";
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "switch" | "stop" | "reconcile";
+            /** Room Id */
+            room_id: string;
+            /** Target */
+            target: string;
+        };
+        /**
+         * ScenarioJobInProgressResponse
+         * @description REST `409` body while a job runs in the room.
+         */
+        ScenarioJobInProgressResponse: {
+            detail: components["schemas"]["ScenarioJobInProgressDetail"];
+        };
+        /** ScenarioJobManualStep */
+        ScenarioJobManualStep: {
+            /** Instruction */
+            instruction: string;
+            /** Node */
+            node: string;
+        };
+        /**
+         * ScenarioJobPhase
+         * @description A phase of the chain — `teardown` (powering the outgoing devices down) or
+         *     `activation` (bringing the incoming scenario up in topology order).
+         */
+        ScenarioJobPhase: {
+            /** Manual Steps */
+            manual_steps?: components["schemas"]["ScenarioJobManualStep"][];
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "teardown" | "activation";
+            /** Steps */
+            steps: components["schemas"]["ScenarioJobStep"][];
+        };
+        /**
+         * ScenarioJobStartedEvent
+         * @description Once per job, before any device is touched.
+         */
+        ScenarioJobStartedEvent: {
+            /**
+             * Eventtype
+             * @default scenario_job_started
+             * @constant
+             */
+            eventType: "scenario_job_started";
+            /** From */
+            from: string;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "switch" | "stop" | "reconcile";
+            /** Max Duration Ms */
+            max_duration_ms: number;
+            /** Room Id */
+            room_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "canonical" | "rest" | "wb_card";
+            /** Target */
+            target: string;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /**
+         * ScenarioJobStep
+         * @description One planned device step of a job phase, with its execution status.
+         */
+        ScenarioJobStep: {
+            /**
+             * Command
+             * @description The device's native command.
+             */
+            command: string;
+            /**
+             * Delay Ms
+             * @description Settle wait after a no-feedback step.
+             * @default 0
+             */
+            delay_ms: number;
+            /** Device Id */
+            device_id: string;
+            /**
+             * Domain
+             * @description `power` or `input`.
+             */
+            domain: string;
+            /**
+             * Error
+             * @description The executor's error text for a failed or unconfirmed step.
+             */
+            error?: string | null;
+            /**
+             * Feedback
+             * @description Whether the step is confirmed by polling the device's reported state.
+             * @default false
+             */
+            feedback: boolean;
+            /**
+             * Finished At
+             * @description ISO-8601 UTC.
+             */
+            finished_at?: string | null;
+            /**
+             * Index
+             * @description Position of the step within its phase (0-based).
+             */
+            index: number;
+            /**
+             * Poll Timeout Ms
+             * @description How long a feedback step is polled before it counts as not confirmed.
+             */
+            poll_timeout_ms?: number | null;
+            /**
+             * Pre Delay Ms
+             * @description Wait before the step (from a topology ordering edge).
+             * @default 0
+             */
+            pre_delay_ms: number;
+            /**
+             * Started At
+             * @description ISO-8601 UTC.
+             */
+            started_at?: string | null;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "running" | "done" | "failed" | "not_confirmed";
+            /**
+             * Target
+             * @description The canonical value the step drives the domain to.
+             */
+            target?: unknown;
+            /**
+             * Zone
+             * @description Power zone, for multi-zone devices.
+             */
+            zone?: string | null;
+        };
+        /**
+         * ScenarioJobUnknownDetail
+         * @description The `detail` of `GET /scenario/jobs/{job_id}` `404` — including every id from
+         *     before the last bridge restart.
+         */
+        ScenarioJobUnknownDetail: {
+            /**
+             * Code
+             * @default job_unknown
+             * @constant
+             */
+            code: "job_unknown";
+            /** Job Id */
+            job_id: string;
+        };
+        /**
+         * ScenarioJobUnknownResponse
+         * @description `GET /scenario/jobs/{job_id}` `404` body.
+         */
+        ScenarioJobUnknownResponse: {
+            detail: components["schemas"]["ScenarioJobUnknownDetail"];
+        };
+        /** ScenarioJobsByRoom */
+        ScenarioJobsByRoom: {
+            /** Rooms */
+            rooms: {
+                [key: string]: components["schemas"]["ScenarioRoomJobs"];
+            };
+        };
+        /**
+         * ScenarioPhaseEvent
+         * @description Once per phase, when the phase is planned: its steps and the manual steps it
+         *     needs from a person.
+         */
+        ScenarioPhaseEvent: {
+            /**
+             * Eventtype
+             * @default scenario_phase
+             * @constant
+             */
+            eventType: "scenario_phase";
+            /** Job Id */
+            job_id: string;
+            /** Manual Steps */
+            manual_steps?: components["schemas"]["ScenarioJobManualStep"][];
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "teardown" | "activation";
+            /** Room Id */
+            room_id: string;
+            /** Steps */
+            steps: components["schemas"]["ScenarioPhasePlannedStep"][];
+            /** Timestamp */
+            timestamp: string;
+        };
+        /** ScenarioPhasePlannedStep */
+        ScenarioPhasePlannedStep: {
+            /** Command */
+            command: string;
+            /**
+             * Delay Ms
+             * @default 0
+             */
+            delay_ms: number;
+            /** Device Id */
+            device_id: string;
+            /** Domain */
+            domain: string;
+            /**
+             * Feedback
+             * @default false
+             */
+            feedback: boolean;
+            /** Index */
+            index: number;
+            /**
+             * Poll Timeout Ms
+             * @default null
+             */
+            poll_timeout_ms: number | null;
+            /**
+             * Pre Delay Ms
+             * @default 0
+             */
+            pre_delay_ms: number;
+            /**
+             * Target
+             * @default null
+             */
+            target: unknown;
+            /**
+             * Zone
+             * @default null
+             */
+            zone: string | null;
+        };
+        /**
          * ScenarioResponse
          * @description Base response model for scenario operations.
          *
@@ -3011,10 +3440,74 @@ export interface components {
          *     via ``GET /scenario/state``; survives page reload).
          */
         ScenarioResponse: {
+            /**
+             * Job Id
+             * @description The scenario job that ran the chain (`GET /scenario/jobs/{job_id}` has every step); absent when nothing ran.
+             */
+            job_id?: string | null;
             /** Message */
             message: string;
             /** Status */
             status: string;
+        };
+        /**
+         * ScenarioRoomJobs
+         * @description A room's running job and its most recent finished ones, newest first.
+         */
+        ScenarioRoomJobs: {
+            /** Recent */
+            recent?: components["schemas"]["ScenarioJob"][];
+            /** Room Id */
+            room_id: string;
+            running?: components["schemas"]["ScenarioJob"] | null;
+        };
+        /**
+         * ScenarioShutdownEvent
+         * @description The terminal event of a stop job.
+         */
+        ScenarioShutdownEvent: {
+            /**
+             * Duration Ms
+             * @default null
+             */
+            duration_ms: number | null;
+            /**
+             * Eventtype
+             * @default scenario_shutdown
+             * @constant
+             */
+            eventType: "scenario_shutdown";
+            /**
+             * Failures
+             * @default null
+             */
+            failures: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Job Id
+             * @default null
+             */
+            job_id: string | null;
+            /**
+             * Job State
+             * @default null
+             */
+            job_state: ("succeeded" | "failed") | null;
+            /**
+             * Powered Off
+             * @default null
+             */
+            powered_off: string[] | null;
+            /** Room Id */
+            room_id: string;
+            /**
+             * Scenario Id
+             * @default null
+             */
+            scenario_id: string | null;
+            /** Timestamp */
+            timestamp: string;
         };
         /**
          * ScenarioState
@@ -3040,6 +3533,114 @@ export interface components {
             scenario_id: string;
         };
         /**
+         * ScenarioStepEvent
+         * @description Twice per step: `started` just before dispatch, then `done`, `failed` or
+         *     `not_confirmed` after the step's confirmation gate. `elapsed_ms` is since acceptance.
+         */
+        ScenarioStepEvent: {
+            /** Command */
+            command: string;
+            /** Device Id */
+            device_id: string;
+            /** Domain */
+            domain: string;
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /**
+             * Error
+             * @default null
+             */
+            error: string | null;
+            /**
+             * Eventtype
+             * @default scenario_step
+             * @constant
+             */
+            eventType: "scenario_step";
+            /** Index */
+            index: number;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "teardown" | "activation";
+            /** Room Id */
+            room_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "done" | "failed" | "not_confirmed";
+            /**
+             * Target
+             * @default null
+             */
+            target: unknown;
+            /** Timestamp */
+            timestamp: string;
+            /**
+             * Zone
+             * @default null
+             */
+            zone: string | null;
+        };
+        /**
+         * ScenarioSwitchedEvent
+         * @description The terminal event of a switch or a reconcile job (and the tracking notification
+         *     of a startup restore, which carries no `job_id`).
+         */
+        ScenarioSwitchedEvent: {
+            /**
+             * Duration Ms
+             * @default null
+             */
+            duration_ms: number | null;
+            /**
+             * Eventtype
+             * @default scenario_switched
+             * @constant
+             */
+            eventType: "scenario_switched";
+            /**
+             * Failures
+             * @default null
+             */
+            failures: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Job Id
+             * @default null
+             */
+            job_id: string | null;
+            /**
+             * Job State
+             * @default null
+             */
+            job_state: ("succeeded" | "failed") | null;
+            /**
+             * Powered Off
+             * @default null
+             */
+            powered_off: string[] | null;
+            /** Room Id */
+            room_id: string;
+            /** Scenario Id */
+            scenario_id: string;
+            /**
+             * State
+             * @description The scenario's `ScenarioState`.
+             * @default null
+             */
+            state: {
+                [key: string]: unknown;
+            } | null;
+            /** Timestamp */
+            timestamp: string;
+        };
+        /**
          * ServiceInfo
          * @description Schema for service information.
          */
@@ -3063,6 +3664,12 @@ export interface components {
             graceful: boolean;
             /** Id */
             id: string;
+            /**
+             * Wait
+             * @description Wait for the chain to finish (default). `false` returns `202` at acceptance with the job to follow (since contract v1.12).
+             * @default true
+             */
+            wait: boolean;
         };
         /**
          * StartScenarioRequest
@@ -3071,6 +3678,12 @@ export interface components {
         StartScenarioRequest: {
             /** Id */
             id: string;
+            /**
+             * Wait
+             * @description Wait for the chain to finish (default). `false` returns `202` at acceptance with the job to follow (since contract v1.12).
+             * @default true
+             */
+            wait: boolean;
         };
         /** StateDefinition */
         StateDefinition: {
@@ -3109,6 +3722,12 @@ export interface components {
             graceful: boolean;
             /** Id */
             id: string;
+            /**
+             * Wait
+             * @description Wait for the chain to finish (default). `false` returns `202` at acceptance with the job to follow (since contract v1.12).
+             * @default true
+             */
+            wait: boolean;
         };
         /**
          * SystemConfigResponse
@@ -3540,6 +4159,15 @@ export interface operations {
                     "application/json": components["schemas"]["CanonicalActionResponse"];
                 };
             };
+            /** @description A scenario job was accepted (`wait: false` on a Scenario Manager's `scenario` capability): `state.job_id` and `state.max_duration_ms` — `success: true` means accepted, not done. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalActionResponse"];
+                };
+            };
             /** @description Bad Request */
             400: {
                 headers: {
@@ -3551,6 +4179,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalActionResponse"];
+                };
+            };
+            /** @description `job_in_progress`: a scenario job is already running in the room (`error.job_id` names it); or a Scenario Manager proxy refusal (`no_active_scenario`, `role_unbound`). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4248,6 +4885,78 @@ export interface operations {
             };
         };
     };
+    list_scenario_jobs_scenario_jobs_get: {
+        parameters: {
+            query?: {
+                /** @description A room id: its running job and the last 20 finished ones, newest first. Without it, every room that has had a job since the bridge started. */
+                room?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioRoomJobs"] | components["schemas"]["ScenarioJobsByRoom"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scenario_job_scenario_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJob"];
+                };
+            };
+            /** @description `detail.code = job_unknown` — including every id from before the last bridge restart. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobUnknownResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     execute_role_action_scenario_role_action_post: {
         parameters: {
             query?: never;
@@ -4305,6 +5014,24 @@ export interface operations {
                     "application/json": components["schemas"]["ScenarioResponse"];
                 };
             };
+            /** @description `wait: false`: the job was accepted (not done) — follow it via `GET /scenario/jobs/{job_id}` or the scenarios event stream. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobAccepted"];
+                };
+            };
+            /** @description `detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobInProgressResponse"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -4336,6 +5063,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScenarioResponse"];
+                };
+            };
+            /** @description `wait: false`: the job was accepted (not done) — follow it via `GET /scenario/jobs/{job_id}` or the scenarios event stream. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobAccepted"];
+                };
+            };
+            /** @description `detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobInProgressResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4403,6 +5148,24 @@ export interface operations {
                     "application/json": components["schemas"]["ScenarioResponse"];
                 };
             };
+            /** @description `wait: false`: the job was accepted (not done) — follow it via `GET /scenario/jobs/{job_id}` or the scenarios event stream. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobAccepted"];
+                };
+            };
+            /** @description `detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobInProgressResponse"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -4436,6 +5199,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ForceReconcileResponse"];
+                };
+            };
+            /** @description `detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioJobInProgressResponse"];
                 };
             };
             /** @description Validation Error */

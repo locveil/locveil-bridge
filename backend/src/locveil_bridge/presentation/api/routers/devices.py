@@ -3,8 +3,10 @@ import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 
 from locveil_bridge.domain.devices.config import BaseDeviceConfig
+from locveil_bridge.domain.scenarios.jobs import ScenarioJobInProgress
 from locveil_bridge.domain.scenarios.proxy import (
     NO_SCENARIO,
     SCENARIO_CAPABILITY,
@@ -64,12 +66,32 @@ _PROXY_ERROR_STATUS = {
 }
 
 
+def _job_in_progress_response(
+    entity_id: str, payload: CanonicalActionRequest, e: ScenarioJobInProgress
+) -> HTTPException:
+    """SCN-19 §5.1: the room is busy — `409 job_in_progress`, the body names the running
+    job so the caller can join it (subscribe / GET /scenario/jobs/{id})."""
+    resp = _err_response(
+        entity_id, payload.capability, payload.action,
+        CanonicalErrorCode.JOB_IN_PROGRESS, str(e),
+    )
+    assert resp.error is not None
+    resp.error.job_id = e.job.job_id
+    return HTTPException(status_code=409, detail=resp.model_dump())
+
+
 async def _execute_scenario_capability(
     room_id: str, entity_id: str, payload: CanonicalActionRequest
-) -> CanonicalActionResponse:
+) -> Any:
     """The manager entity's own `scenario` capability: `set(<id>)` activates/switches
     (reconciler diff), `off` deactivates (powers the room down). State in the response
-    is the room's active scenario id (or `none`)."""
+    is the room's active scenario id (or `none`).
+
+    SCN-19 (contract v1.12): the chain runs as a per-room JOB. `wait: true` (default)
+    returns `200` when it ended, `state` carrying the `job_id`; `wait: false` returns
+    `202` at acceptance with `state.job_id` + `state.max_duration_ms` (`success: true`
+    means ACCEPTED, not done). A room already at the target answers `200 no_op` and
+    starts nothing; a room with a running job answers `409 job_in_progress`."""
     assert scenario_proxy is not None
     try:
         if payload.action == "set":
@@ -82,12 +104,9 @@ async def _execute_scenario_capability(
                     field="value", reason="missing",
                 )
                 raise HTTPException(status_code=400, detail=resp.model_dump())
-            if value == NO_SCENARIO:
-                result = await scenario_proxy.deactivate(room_id)
-            else:
-                result = await scenario_proxy.activate(room_id, value)
+            stop = value == NO_SCENARIO
         elif payload.action == "off":
-            result = await scenario_proxy.deactivate(room_id)
+            value, stop = NO_SCENARIO, True
         else:
             resp = _err_response(
                 entity_id, payload.capability, payload.action,
@@ -95,20 +114,50 @@ async def _execute_scenario_capability(
                 f"Capability 'scenario' has no action {payload.action!r} (set | off)",
             )
             raise HTTPException(status_code=404, detail=resp.model_dump())
+
+        if payload.wait:
+            result = await (scenario_proxy.deactivate(room_id) if stop
+                            else scenario_proxy.activate(room_id, value))
+        else:
+            job = await (scenario_proxy.start_deactivate(room_id) if stop
+                         else scenario_proxy.start_activate(room_id, value))
+            if job is None:
+                result = {"success": True, "no_op": True, "powered_off": [], "failures": []}
+            else:
+                accepted = CanonicalActionResponse(
+                    success=True,
+                    device_id=entity_id,
+                    capability=payload.capability,
+                    action=payload.action,
+                    state={
+                        "scenario": scenario_proxy.active_id(room_id),
+                        "job_id": job.job_id,
+                        "max_duration_ms": job.max_duration_ms,
+                    },
+                    error=None,
+                )
+                return JSONResponse(status_code=202, content=accepted.model_dump())
     except ScenarioProxyError as e:
         resp = _err_response(
             entity_id, payload.capability, payload.action,
             _PROXY_ERROR_CODE.get(e.code, CanonicalErrorCode.INTERNAL_ERROR), str(e),
         )
         raise HTTPException(status_code=_PROXY_ERROR_STATUS.get(e.code, 500), detail=resp.model_dump())
+    except ScenarioJobInProgress as e:
+        raise _job_in_progress_response(entity_id, payload, e)
 
+    state: Dict[str, Any] = {"scenario": scenario_proxy.active_id(room_id)}
+    if not result.get("no_op"):
+        state["job_id"] = result.get("job_id")
+    state.update({k: v for k, v in result.items() if k in ("powered_off", "failures")})
     return CanonicalActionResponse(
         success=bool(result.get("success", True)),
         device_id=entity_id,
         capability=payload.capability,
         action=payload.action,
-        state={"scenario": scenario_proxy.active_id(room_id), **{k: v for k, v in result.items() if k in ("powered_off", "failures")}},
+        state=state,
         error=None,
+        no_op=bool(result.get("no_op", False)),
     )
 
 
@@ -339,8 +388,16 @@ _HTTP_FOR_CODE = {
     "/devices/{device_id}/canonical",
     response_model=CanonicalActionResponse,
     responses={
+        202: {"model": CanonicalActionResponse,
+              "description": "A scenario job was accepted (`wait: false` on a Scenario "
+                             "Manager's `scenario` capability): `state.job_id` and "
+                             "`state.max_duration_ms` — `success: true` means accepted, not done."},
         404: {"model": CanonicalActionResponse},
         400: {"model": CanonicalActionResponse},
+        409: {"model": CanonicalActionResponse,
+              "description": "`job_in_progress`: a scenario job is already running in the "
+                             "room (`error.job_id` names it); or a Scenario Manager proxy "
+                             "refusal (`no_active_scenario`, `role_unbound`)."},
         503: {"model": CanonicalActionResponse},
         500: {"model": CanonicalActionResponse},
     },
@@ -371,6 +428,12 @@ async def execute_canonical_action(device_id: str, payload: CanonicalActionReque
         `state.reachable` flipped False during the wait (a per-control `meta/error`
         flag landed, per the Wirenboard MQTT convention).
       - `internal_error` (500) - everything else.
+      - `job_in_progress` (409) - a Scenario Manager's `scenario` request while a
+        scenario job runs in the room; `error.job_id` names it (since contract v1.12).
+
+    On a Scenario Manager's `scenario` capability `wait: false` returns `202` with
+    `state.job_id` + `state.max_duration_ms`: the job is accepted, not done — follow it
+    via `GET /scenario/jobs/{job_id}` or the scenarios event stream.
     """
     if not device_manager:
         raise HTTPException(status_code=503, detail="Service not fully initialized")

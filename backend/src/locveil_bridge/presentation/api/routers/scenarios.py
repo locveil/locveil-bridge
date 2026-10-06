@@ -1,9 +1,11 @@
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
+from locveil_bridge.domain.scenarios.jobs import ScenarioJob as DomainScenarioJob, ScenarioJobInProgress
 from locveil_bridge.domain.scenarios.models import ScenarioDefinition
 from locveil_bridge.domain.scenarios.reconciler import plan_ceiling_ms
 from locveil_bridge.domain.scenarios.scenario import ScenarioError, ScenarioExecutionError
@@ -12,6 +14,16 @@ from locveil_bridge.domain.rooms.service import RoomManager
 
 from locveil_bridge.presentation.api.layout_engine import build_scenario_manifest
 from locveil_bridge.presentation.api.layout_manifest import LayoutManifest
+from locveil_bridge.presentation.api.schemas import (
+    ScenarioJob,
+    ScenarioJobAccepted,
+    ScenarioJobInProgressDetail,
+    ScenarioJobInProgressResponse,
+    ScenarioJobUnknownDetail,
+    ScenarioJobUnknownResponse,
+    ScenarioJobsByRoom,
+    ScenarioRoomJobs,
+)
 
 # Note: the module-level mqtt_client global is typed Any deliberately --
 # importing the concrete MQTTClient class from infrastructure here would
@@ -50,11 +62,18 @@ def _require_scenario_manager() -> ScenarioManager:
         raise HTTPException(status_code=503, detail="Scenario manager not initialized")
     return scenario_manager
 
+_WAIT_DESCRIPTION = (
+    "Wait for the chain to finish (default). `false` returns `202` at acceptance with the "
+    "job to follow (since contract v1.12)."
+)
+
+
 # Request and response models
 class SwitchScenarioRequest(BaseModel):
     """Request model for switching scenarios."""
     id: str
     graceful: bool = True
+    wait: bool = Field(default=True, description=_WAIT_DESCRIPTION)
 
 class ActionRequest(BaseModel):
     """Request model for executing a role action."""
@@ -71,15 +90,69 @@ class ScenarioResponse(BaseModel):
     """
     status: str
     message: str
+    job_id: Optional[str] = Field(
+        default=None,
+        description="The scenario job that ran the chain (`GET /scenario/jobs/{job_id}` has "
+                    "every step); absent when nothing ran.",
+    )
 
 class StartScenarioRequest(BaseModel):
     """Request model for starting a scenario."""
     id: str
+    wait: bool = Field(default=True, description=_WAIT_DESCRIPTION)
 
 class ShutdownScenarioRequest(BaseModel):
     """Request model for shutting down a scenario."""
     id: str
     graceful: bool = True
+    wait: bool = Field(default=True, description=_WAIT_DESCRIPTION)
+
+
+# --- SCN-19: scenario jobs ----------------------------------------------------
+
+def _job_in_progress(e: ScenarioJobInProgress) -> HTTPException:
+    """The REST `409` for a busy room: a structured detail (the other scenario `409`s —
+    "already active", "not the active one" — keep their string detail)."""
+    job = e.job
+    return HTTPException(
+        status_code=409,
+        detail=ScenarioJobInProgressDetail.model_validate({
+            "room_id": job.room_id, "job_id": job.job_id, "kind": job.kind, "target": job.target,
+        }).model_dump(),
+    )
+
+
+def _accepted(job: DomainScenarioJob) -> JSONResponse:
+    return JSONResponse(
+        status_code=202,
+        content=ScenarioJobAccepted.model_validate({
+            "job_id": job.job_id, "room_id": job.room_id, "kind": job.kind,
+            "target": job.target, "max_duration_ms": job.max_duration_ms,
+        }).model_dump(),
+    )
+
+
+def _job_dto(job: DomainScenarioJob) -> ScenarioJob:
+    return ScenarioJob.model_validate(job.to_dict())
+
+
+def _room_jobs(mgr: ScenarioManager, room_id: str) -> ScenarioRoomJobs:
+    running = mgr.jobs.running(room_id)
+    return ScenarioRoomJobs(
+        room_id=room_id,
+        running=_job_dto(running) if running else None,
+        recent=[_job_dto(j) for j in mgr.jobs.recent(room_id)],
+    )
+
+
+_JOB_RESPONSES: Dict[Any, Any] = {
+    202: {"model": ScenarioJobAccepted,
+          "description": "`wait: false`: the job was accepted (not done) — follow it via "
+                         "`GET /scenario/jobs/{job_id}` or the scenarios event stream."},
+    409: {"model": ScenarioJobInProgressResponse,
+          "description": "`detail.code = job_in_progress` (a structured body naming the "
+                         "running job) — or the scenario-state refusal as a string detail."},
+}
 
 
 # --- SCN-11: per-device force-reconcile DTOs ---------------------------------
@@ -130,6 +203,10 @@ class ForceReconcileResponse(BaseModel):
     device_id: str
     executed: List[ReconcilePlanStep]
     failures: List[ForceReconcileFailure]
+    job_id: Optional[str] = Field(
+        default=None,
+        description="The `reconcile` job that ran the forced chain (since contract v1.12).",
+    )
 
 def check_initialized():
     """Check if the router is properly initialized with required dependencies."""
@@ -229,22 +306,26 @@ async def get_reconcile_preview(id: str):
     return ReconcilePreviewResponse(scenario_id=id, devices=rows)
 
 
-@router.post("/scenario/{id}/force_reconcile", response_model=ForceReconcileResponse)
+@router.post("/scenario/{id}/force_reconcile", response_model=ForceReconcileResponse,
+             responses={409: _JOB_RESPONSES[409]})
 async def force_reconcile_device(id: str, data: ForceReconcileRequest):
     """Force ONE device into the active scenario's desired state — the
     believed-vs-desired diff is skipped (the belief may be wrong; the user picking the
     row is the feedback channel), driver idempotence guards are bypassed via the
     reserved `force` param, and toggle power claims the plan target (`assume_state`).
     Runs the device's chain through the normal executor (gates + polls); worst case a
-    poll-timeout wait, so the call can take seconds."""
+    poll-timeout wait, so the call can take seconds. It runs as a `reconcile` job under
+    the room's lock: `409 job_in_progress` while another job runs there."""
     mgr = _require_scenario_manager()
     if id not in mgr.scenario_definitions:
         raise HTTPException(status_code=404, detail=f"Scenario '{id}' not found")
     try:
-        plan, result = await mgr.force_reconcile_device(id, data.device_id)
+        plan, result, job = await mgr.force_reconcile_device(id, data.device_id)
     except ScenarioError as e:
         status = 409 if e.error_type == "not_active" else 404
         raise HTTPException(status_code=status, detail=str(e))
+    except ScenarioJobInProgress as e:
+        raise _job_in_progress(e)
 
     return ForceReconcileResponse(
         success=result.success,
@@ -254,16 +335,19 @@ async def force_reconcile_device(id: str, data: ForceReconcileRequest):
             ForceReconcileFailure(command=a.command, error=err)
             for a, err in result.failures
         ],
+        job_id=job.job_id,
     )
 
 
-@router.post("/scenario/switch", response_model=ScenarioResponse)
+@router.post("/scenario/switch", response_model=ScenarioResponse, responses=_JOB_RESPONSES)
 async def switch_scenario(data: SwitchScenarioRequest):
     """
     Switch to a different scenario.
     
     This endpoint performs a transition between scenarios, handling
-    device state changes efficiently.
+    device state changes efficiently. The chain runs as the room's scenario job:
+    `wait: true` (default) returns when it ended, `wait: false` returns `202` with the
+    accepted job; a room with a running job answers `409 job_in_progress`.
     
     Args:
         data: The switch scenario request with scenario ID and graceful flag
@@ -278,22 +362,29 @@ async def switch_scenario(data: SwitchScenarioRequest):
     assert scenario_manager is not None  # narrowed by check_initialized() above
     
     try:
-        await scenario_manager.switch_scenario(data.id, graceful=data.graceful)
-
+        if not data.wait:
+            job = await scenario_manager.start_switch(data.id, graceful=data.graceful)
+            if job is not None:
+                return _accepted(job)
+            return ScenarioResponse(status="success", message=f"Scenario '{data.id}' is already active")
+        result = await scenario_manager.switch_scenario(data.id, graceful=data.graceful)
 
         return ScenarioResponse(
             status="success",
             message=f"Successfully switched to scenario '{data.id}'",
+            job_id=result.get("job_id"),
         )
     except ValueError as e:
         # Scenario not found
         raise HTTPException(status_code=404, detail=str(e))
+    except ScenarioJobInProgress as e:
+        raise _job_in_progress(e)
     except Exception as e:
         # Log the full error with traceback for server logs
         logger.error(f"Error switching to scenario {data.id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to switch scenario: {str(e)}")
 
-@router.post("/scenario/start", response_model=ScenarioResponse)
+@router.post("/scenario/start", response_model=ScenarioResponse, responses=_JOB_RESPONSES)
 async def start_scenario(data: StartScenarioRequest):
     """
     Start a scenario if no scenario is currently active.
@@ -329,19 +420,26 @@ async def start_scenario(data: StartScenarioRequest):
     
     try:
         # Use switch_scenario to start the scenario (since no current scenario exists)
-        await scenario_manager.switch_scenario(data.id, graceful=True)
-
+        if not data.wait:
+            job = await scenario_manager.start_switch(data.id, graceful=True)
+            if job is not None:
+                return _accepted(job)
+            return ScenarioResponse(status="success", message=f"Scenario '{data.id}' is already active")
+        result = await scenario_manager.switch_scenario(data.id, graceful=True)
 
         return ScenarioResponse(
             status="success",
             message=f"Successfully started scenario '{data.id}'",
+            job_id=result.get("job_id"),
         )
+    except ScenarioJobInProgress as e:
+        raise _job_in_progress(e)
     except Exception as e:
         # Log the full error with traceback for server logs
         logger.error(f"Error starting scenario {data.id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to start scenario: {str(e)}")
 
-@router.post("/scenario/shutdown", response_model=ScenarioResponse)
+@router.post("/scenario/shutdown", response_model=ScenarioResponse, responses=_JOB_RESPONSES)
 async def shutdown_scenario(data: ShutdownScenarioRequest):
     """
     Shutdown the currently active scenario.
@@ -383,13 +481,21 @@ async def shutdown_scenario(data: ShutdownScenarioRequest):
 
         # Deactivate the room's scenario — this is the explicit "turn it all off" action and
         # DOES power off the gear (distinct from process shutdown, which leaves hardware as-is).
-        await scenario_manager.deactivate(room_id)
-
+        assert room_id is not None  # the active lookup above needed it
+        if not data.wait:
+            job = await scenario_manager.start_stop(room_id)
+            if job is not None:
+                return _accepted(job)
+            return ScenarioResponse(status="success", message=f"No scenario is active in room '{room_id}'")
+        result = await scenario_manager.deactivate(room_id)
 
         return ScenarioResponse(
             status="success",
             message=f"Successfully shut down scenario '{current_scenario_id}'",
+            job_id=result.get("job_id"),
         )
+    except ScenarioJobInProgress as e:
+        raise _job_in_progress(e)
     except Exception as e:
         # Log the full error with traceback for server logs
         logger.error(f"Error shutting down scenario {data.id}: {str(e)}", exc_info=True)
@@ -444,6 +550,34 @@ async def execute_role_action(data: ActionRequest):
             exc_info=True
         )
         raise HTTPException(status_code=500, detail=f"Failed to execute action: {str(e)}")
+
+@router.get("/scenario/jobs", response_model=Union[ScenarioRoomJobs, ScenarioJobsByRoom])
+async def list_scenario_jobs(
+    room: Optional[str] = Query(None, description="A room id: its running job and the last 20 finished ones, newest first. Without it, every room that has had a job since the bridge started."),
+):
+    """Scenario jobs by room (since contract v1.12) — for pollers and for the UI after a
+    page reload ("is something running in my room?"). Jobs live in memory: after a bridge
+    restart the lists are empty."""
+    mgr = _require_scenario_manager()
+    if room is not None:
+        return _room_jobs(mgr, room)
+    return ScenarioJobsByRoom(rooms={r: _room_jobs(mgr, r) for r in mgr.jobs.rooms()})
+
+
+@router.get("/scenario/jobs/{job_id}", response_model=ScenarioJob,
+            responses={404: {"model": ScenarioJobUnknownResponse,
+                             "description": "`detail.code = job_unknown` — including every id from before the last bridge restart."}})
+async def get_scenario_job(job_id: str):
+    """One scenario job (since contract v1.12): its phases, every step with its status,
+    failures and result. The record is the truth a consumer reconciles against after a
+    reconnect; `404 job_unknown` for an id the bridge does not hold — every id from before
+    its last restart (`GET /scenario/state` says what is active now)."""
+    mgr = _require_scenario_manager()
+    job = mgr.jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=ScenarioJobUnknownDetail(job_id=job_id).model_dump())
+    return _job_dto(job)
+
 
 @router.get("/scenario/definition", response_model=List[ScenarioDefinition])
 async def get_scenarios_for_room(room: Optional[str] = Query(None, description="Filter scenarios by room ID")):

@@ -21,7 +21,7 @@ import heapq
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -823,12 +823,25 @@ async def _gate(device: Any, action: PlannedAction, poll_interval_ms: int) -> bo
     return True
 
 
+# SCN-19: the executor's step observer — called at the two points a job records:
+# ``started`` just before dispatch (after the step's pre-delay) and the outcome
+# (``done`` | ``failed`` | ``not_confirmed``) after the gate. Awaited inline so job
+# events leave in execution order; the executor itself never depends on it.
+StepObserver = Callable[[int, PlannedAction, str, Optional[str]], Awaitable[None]]
+
+STEP_STARTED = "started"
+STEP_DONE = "done"
+STEP_FAILED = "failed"
+STEP_NOT_CONFIRMED = "not_confirmed"
+
+
 async def execute_plan(
     plan: ReconcilePlan,
     devices: Dict[str, Any],
     *,
     abort_on_failure: bool = False,
     poll_interval_ms: int = 200,
+    on_step: Optional[StepObserver] = None,
 ) -> ExecutionResult:
     """Execute an ordered plan: honor pre-delays, dispatch the native command, check success
     (failures are surfaced, not swallowed -- fixes RC2), then gate before the next step.
@@ -838,16 +851,26 @@ async def execute_plan(
     ``tv_on_speakers`` reported success twice while ARC never engaged). Such a step
     appears in BOTH ``executed`` (it was dispatched and acked) and ``failures`` (it
     did not take effect); ``success`` keys off ``failures``. Feedback-less steps keep
-    the optimistic path — there is nothing to know."""
+    the optimistic path — there is nothing to know.
+
+    SCN-19: ``on_step`` (optional) observes each step at its two points; see
+    ``StepObserver``."""
     result = ExecutionResult(manual_steps=list(plan.manual_steps))
 
-    for action in plan.actions:
+    async def _observe(index: int, action: PlannedAction, status: str, err: Optional[str]) -> None:
+        if on_step is not None:
+            await on_step(index, action, status, err)
+
+    for index, action in enumerate(plan.actions):
         if action.pre_delay_ms:
             await asyncio.sleep(action.pre_delay_ms / 1000)
+
+        await _observe(index, action, STEP_STARTED, None)
 
         device = devices.get(action.device_id)
         if device is None:
             result.failures.append((action, "device not found"))
+            await _observe(index, action, STEP_FAILED, "device not found")
             if abort_on_failure:
                 break
             continue
@@ -865,11 +888,13 @@ async def execute_plan(
             ok, err = False, str(exc)
 
         if not ok:
-            result.failures.append((action, err or "command failed"))
+            err = err or "command failed"
+            result.failures.append((action, err))
             logger.error(
                 "scenario step failed: %s %s(%s) -> %s",
                 action.device_id, action.command, action.params, err,
             )
+            await _observe(index, action, STEP_FAILED, err)
             if abort_on_failure:
                 break
             continue
@@ -883,7 +908,11 @@ async def execute_plan(
             result.failures.append((action, err))
             logger.error("scenario step not confirmed: %s %s -> %s",
                          action.device_id, action.command, err)
+            await _observe(index, action, STEP_NOT_CONFIRMED, err)
             if abort_on_failure:
                 break
+            continue
+
+        await _observe(index, action, STEP_DONE, None)
 
     return result

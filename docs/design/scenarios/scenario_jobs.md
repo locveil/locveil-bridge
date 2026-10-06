@@ -1,7 +1,11 @@
 # Scenario jobs — the tier-3 async switch API (VWB-47 design)
 
-**Status: DESIGN — council-decided scope, implementation pending** (board PROD-18 round 2,
-decisions 9–10, owner paste 2026-10-06; bridge keeper position taken as the starting point).
+**Status: IMPLEMENTED (SCN-19, 2026-10-06) and cut as `catalog-v1.12.0` in the same commit**
+— the owner's ruling on the intake finding (the pinned OpenAPI copy is byte-locked to the
+regenerated one, so an additive surface cannot land without its cut): the WB7 sitting of §10
+measures against a cut contract, and a ceiling exceeded by the bridge's own waiting becomes
+a `1.12.1` follow-up rather than a block. Council-decided scope: board PROD-18 round 2,
+decisions 9–10, owner paste 2026-10-06; bridge keeper position taken as the starting point.
 Implementation: **SCN-19** (this document is its spec). **Consumer review folded in
 (2026-10-06, SCN-19 intake):** the voice keeper approved with changes — the four asks are
 in §5.1 (what `success` means on a `202`), §5.4 (the `connected` / `keepalive` bodies and
@@ -427,9 +431,10 @@ that does not want to hold a request open for that long starts it as a job and f
 
 - **Starting a job.** `scenario.set(value)` or `scenario.off` on a room's scenario manager
   with `wait: false` returns `202` and, in `state`, a `job_id` and the `max_duration_ms`
-  of the target. With `wait: true` (the default) the same request returns when the chain
-  has finished, as before, and `state` also names the `job_id`. A request that finds the
-  room already at the target returns `200` with `no_op: true` and starts nothing.
+  of the target — the `202` means the job was accepted, not that it is done. With
+  `wait: true` (the default) the same request returns when the chain has finished, as
+  before, and `state` also names the `job_id`. A request that finds the room already at
+  the target returns `200` with `no_op: true` and starts nothing.
 - **One job per room.** While a job runs in a room, every further scenario request for
   that room is refused with `409` and the error code `job_in_progress`; the error names
   the running `job_id`. Nothing is queued: a repeated request never runs the chain twice,

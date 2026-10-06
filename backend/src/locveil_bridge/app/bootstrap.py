@@ -47,6 +47,13 @@ from locveil_bridge.presentation.api.routers import (
     system, devices, mqtt, scenarios, rooms, state, events, reports
 )
 from locveil_bridge.presentation.api.catalog import build_catalog
+from locveil_bridge.presentation.api.schemas import (
+    ScenarioJobStartedEvent,
+    ScenarioPhaseEvent,
+    ScenarioShutdownEvent,
+    ScenarioStepEvent,
+    ScenarioSwitchedEvent,
+)
 from locveil_bridge.presentation.api.sse_manager import sse_manager, SSEChannel
 
 from locveil_bridge.__version__ import __version__
@@ -524,6 +531,19 @@ def create_app() -> FastAPI:
                 }
                 if active is not None:
                     payload["state"] = scenario_manager.get_scenario_state(active.scenario_id).model_dump()
+                # SCN-19: the notification is a job's TERMINAL event when a job is
+                # finishing in the room (the manager seals the record before notifying
+                # and releases it after) — extend the existing event with the job's
+                # fields; the restore's tracking notification carries none.
+                job = scenario_manager.jobs.running(room_id)
+                if job is not None and job.finished_at is not None:
+                    payload.update({
+                        "job_id": job.job_id,
+                        "job_state": job.state,
+                        "duration_ms": job.duration_ms,
+                        "failures": list(job.failures),
+                        "powered_off": list(job.powered_off),
+                    })
                 await sse_manager.broadcast(
                     channel=SSEChannel.SCENARIOS,
                     event_type="scenario_switched" if active else "scenario_shutdown",
@@ -531,6 +551,15 @@ def create_app() -> FastAPI:
                 )
 
             scenario_manager.active_changed_observers.append(_scenario_sse_observer)
+
+            # SCN-19: job events (started / phase / step) ride the same channel, in
+            # execution order — the manager awaits each fan-out before the next step.
+            async def _scenario_job_sse_observer(event_type: str, payload: Dict[str, Any]) -> None:
+                await sse_manager.broadcast(
+                    channel=SSEChannel.SCENARIOS, event_type=event_type, data=payload,
+                )
+
+            scenario_manager.job_observers.append(_scenario_job_sse_observer)
 
             # Problem-report service (problem_reports_bridge.md): the collector behind
             # POST /reports (filing, opt-in) and GET /reports/evidence (B-11, always on).
@@ -696,6 +725,9 @@ def create_app() -> FastAPI:
                 rewire_fleet=_rewire_fleet_after_reload,
                 rebuild_scenario_cards=_rebuild_scenario_cards,
                 publish_catalog_version=_publish_catalog_version,
+                # SCN-19 §4: a reload mid-chain would rebuild the scenario cards under
+                # a moving active scenario — wait (bounded) for running jobs first.
+                wait_for_scenario_jobs=scenario_manager.wait_for_jobs,
             )
             reload_service.mqtt_client = mqtt_client
             system.set_reload_service(reload_service)
@@ -859,6 +891,13 @@ OPENAPI_EXTRA_MODELS = [
     AuralicDeviceState,
     EmotivaXMC2State,
     MitsubishiHvacState,
+    # SCN-19 (contract v1.12): the payloads of GET /events/scenarios — SSE has no
+    # operation to hang them on, so a consumer's generated types cover the stream.
+    ScenarioJobStartedEvent,
+    ScenarioPhaseEvent,
+    ScenarioStepEvent,
+    ScenarioSwitchedEvent,
+    ScenarioShutdownEvent,
 ]
 
 

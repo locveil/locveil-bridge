@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -10,16 +11,34 @@ from locveil_bridge.domain.rooms.service import RoomManager
 from locveil_bridge.domain.ports import StateRepositoryPort
 from locveil_bridge.domain.topology.loader import load_topology
 from locveil_bridge.domain.topology.models import Topology
+from locveil_bridge.domain.scenarios.jobs import (
+    JobPhase,
+    JobRegistry,
+    JobStep,
+    STEP_DONE,
+    STEP_FAILED,
+    STEP_NOT_CONFIRMED,
+    STEP_RUNNING,
+    ScenarioJob,
+    iso_utc,
+    new_job_id,
+    utc_now,
+)
 from locveil_bridge.domain.scenarios.reconciler import (
     DevicePreview,
     ExecutionResult,
+    PlannedAction,
     ReconcilePlan,
+    STEP_STARTED,
     build_forced_device_plan,
     build_plan,
     build_power_off_plan,
     build_reconcile_preview,
+    deactivate_ceiling_ms,
     execute_plan,
+    plan_ceiling_ms,
     resolve_targets,
+    scenario_ceiling_ms,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +93,14 @@ class ScenarioManager:
         # card adapter's value-topic publisher; sync or async callables accepted.
         self.on_active_changed: Optional[Any] = None  # legacy single slot (the WB card adapter)
         self.active_changed_observers: List[Any] = []  # additional observers (SSE fan-out, ...)
+        # SCN-19: scenario jobs — the per-room registry (running + last 20) and lock live
+        # here, at the chokepoint every door passes through. Job events (started / phase /
+        # step) leave through `job_observers`, called with (event_type, payload); the
+        # terminal event rides the active-changed notification (the observer reads the
+        # finishing job from the registry). Sync or async callables accepted.
+        self.jobs = JobRegistry()
+        self.job_observers: List[Any] = []
+        self._job_tasks: Dict[str, asyncio.Task] = {}
     
     async def initialize(self) -> None:
         """
@@ -232,11 +259,241 @@ class ScenarioManager:
         assert room is not None  # enforced by Scenario.validate_configuration
         return room
 
-    async def switch_scenario(self, target_id: str, *, graceful: bool = True) -> Dict[str, Any]:
+    # --- SCN-19: scenario jobs (docs/design/scenarios/scenario_jobs.md) ---------------
+    #
+    # Every door — canonical `scenario.set/off`, REST switch/start/shutdown, the WB card,
+    # force-reconcile — lands on `start_switch` / `start_stop` / `force_reconcile_device`.
+    # Each creates ONE job per run of the room's chain, takes the room's lock non-blocking
+    # (a second request while one runs is refused with ScenarioJobInProgress, never
+    # queued), emits `scenario_job_started` and the teardown phase inside the caller's
+    # request (before any device is touched), and runs the chain in its own task so a
+    # `wait: false` caller returns at once and a `wait: true` caller simply awaits the
+    # job. Phases are planned exactly when today's code planned them: the teardown at
+    # acceptance, the activation after the teardown ran — so REL-3's ordering and the
+    # `graceful: false` semantics cannot move.
+
+    def _room_definitions(self, room: str) -> List[ScenarioDefinition]:
+        return [d for d in self.scenario_definitions.values() if d.room_id == room]
+
+    async def _emit_job_event(self, event_type: str, payload: Dict[str, Any]) -> None:
+        """Best-effort fan-out of a job event to the registered observers."""
+        payload = {**payload, "timestamp": iso_utc(utc_now())}
+        for observer in list(self.job_observers):
+            try:
+                result = observer(event_type, payload)
+                if result is not None and hasattr(result, "__await__"):
+                    await result
+            except Exception as e:
+                logger.error(f"job observer failed for {event_type}: {str(e)}")
+
+    async def _accept_job(self, job: ScenarioJob) -> None:
+        """Take the room's lock for `job` and announce it (`scenario_job_started`)."""
+        await self.jobs.accept(job)
+        logger.info(
+            f"scenario job {job.job_id} accepted: {job.kind} → {job.target} in '{job.room_id}' "
+            f"(from {job.from_}, source {job.source}, ceiling {job.max_duration_ms} ms)"
+        )
+        await self._emit_job_event("scenario_job_started", {
+            "job_id": job.job_id,
+            "room_id": job.room_id,
+            "kind": job.kind,
+            "target": job.target,
+            "from": job.from_,
+            "source": job.source,
+            "max_duration_ms": job.max_duration_ms,
+        })
+
+    async def _add_phase(self, job: ScenarioJob, name: str, plan: ReconcilePlan) -> JobPhase:
+        """Record a phase as it is planned and announce it (`scenario_phase`)."""
+        phase = JobPhase(
+            phase=name,
+            steps=[
+                JobStep(
+                    index=i, device_id=a.device_id, domain=a.domain, target=a.target,
+                    command=a.command, zone=a.zone, feedback=a.feedback,
+                    poll_timeout_ms=a.poll_timeout_ms, delay_ms=a.delay_ms,
+                    pre_delay_ms=a.pre_delay_ms,
+                )
+                for i, a in enumerate(plan.actions)
+            ],
+            manual_steps=[{"node": m.node, "instruction": m.instruction} for m in plan.manual_steps],
+        )
+        job.phases.append(phase)
+        await self._emit_job_event("scenario_phase", {
+            "job_id": job.job_id,
+            "room_id": job.room_id,
+            "phase": name,
+            "steps": [st.planned() for st in phase.steps],
+            "manual_steps": list(phase.manual_steps),
+        })
+        return phase
+
+    def _step_observer(self, job: ScenarioJob, phase: JobPhase):
+        """The executor hook for one phase: updates the step record and emits
+        `scenario_step` at the two points (started, then the outcome)."""
+
+        async def on_step(index: int, action: PlannedAction, status: str, error: Optional[str]) -> None:
+            step = phase.steps[index]
+            now = utc_now()
+            if status == STEP_STARTED:
+                step.status = STEP_RUNNING
+                step.started_at = now
+            else:
+                step.status = {
+                    STEP_DONE: STEP_DONE, STEP_FAILED: STEP_FAILED,
+                    STEP_NOT_CONFIRMED: STEP_NOT_CONFIRMED,
+                }.get(status, STEP_FAILED)
+                step.finished_at = now
+                step.error = error
+            await self._emit_job_event("scenario_step", {
+                "job_id": job.job_id,
+                "room_id": job.room_id,
+                "phase": phase.phase,
+                "index": index,
+                "device_id": action.device_id,
+                "domain": action.domain,
+                "target": action.target,
+                "command": action.command,
+                "zone": action.zone,
+                "status": status,
+                "error": error,
+                "elapsed_ms": job.elapsed_ms(),
+            })
+
+        return on_step
+
+    @staticmethod
+    def _failures_of(*results: ExecutionResult) -> List[Dict[str, Any]]:
+        return [
+            {"device": a.device_id, "command": a.command, "error": err}
+            for r in results for a, err in r.failures
+        ]
+
+    def _launch(self, job: ScenarioJob, coro: Any) -> ScenarioJob:
+        task = asyncio.create_task(coro, name=f"scenario-job:{job.job_id}")
+        self._job_tasks[job.room_id] = task
+        task.add_done_callback(lambda t, room=job.room_id: self._job_tasks.pop(room, None)
+                               if self._job_tasks.get(room) is t else None)
+        return job
+
+    async def _seal(self, job: ScenarioJob, room: str) -> None:
+        """Finish the record, fire the terminal notification (the SSE observer reads the
+        sealed job from the registry while it is still the room's running one), then
+        release the lock — held from acceptance to the terminal event (§4)."""
+        active = self.active.get(room)
+        job.finish(active.scenario_id if active else "none")
+        try:
+            await self._notify_active_changed(room)
+        finally:
+            self.jobs.release(job)
+        logger.info(
+            f"scenario job {job.job_id} {job.state} in {job.duration_ms} ms "
+            f"({len(job.failures)} failed step(s))"
+        )
+
+    def _job_result(self, job: ScenarioJob) -> Dict[str, Any]:
+        return {
+            "success": job.succeeded,
+            "powered_off": list(job.powered_off),
+            "failures": list(job.failures),
+            "job_id": job.job_id,
+            "no_op": False,
+        }
+
+    async def start_switch(self, target_id: str, *, graceful: bool = True,
+                           source: str = "rest") -> Optional[ScenarioJob]:
+        """Accept a switch job for the target's room and start its chain.
+
+        Returns the running job, or None when the target is already the room's active
+        scenario (no job, no event — the `no_op` answer). Raises ValueError for an
+        unknown scenario and ScenarioJobInProgress when the room is busy.
+        """
+        logger.debug(f"[SCENARIO_DEBUG] start_switch called: target_id={target_id}, graceful={graceful}")
+        if target_id not in self.scenario_map:
+            raise ValueError(f"Scenario '{target_id}' not found")
+
+        incoming = self.scenario_map[target_id]
+        room = self._room_of(incoming)
+        outgoing = self.active.get(room)
+        logger.debug(f"[SCENARIO_DEBUG] Transition in room '{room}': outgoing={outgoing.scenario_id if outgoing else 'None'}, incoming={incoming.scenario_id}")
+
+        if outgoing and outgoing.scenario_id == incoming.scenario_id and self.jobs.running(room) is None:
+            logger.info(f"Scenario '{target_id}' is already active")
+            return None
+
+        devices = self.device_manager.devices
+        job = ScenarioJob(
+            job_id=new_job_id(room), room_id=room, kind="switch", target=target_id,
+            from_=outgoing.scenario_id if outgoing else "none", source=source,
+            max_duration_ms=scenario_ceiling_ms(
+                incoming.definition, self._room_definitions(room), self.topology, devices
+            ),
+        )
+        await self._accept_job(job)
+
+        logger.info(
+            f"Switching room '{room}' from '{outgoing.scenario_id if outgoing else 'None'}' "
+            f"to '{incoming.scenario_id}' (job {job.job_id})"
+        )
+        try:
+            # The teardown is planned at acceptance, from believed state before anything
+            # runs — exactly as _switch_via_reconciler did.
+            incoming_involved = resolve_targets(incoming.definition, self.topology)[2]
+            outgoing_involved = self._involved_devices(outgoing) if outgoing else set()
+            to_power_off = (outgoing_involved - incoming_involved) if graceful else outgoing_involved
+            job.powered_off = sorted(to_power_off)
+            teardown_plan = build_power_off_plan(job.powered_off, devices)
+            teardown_phase = await self._add_phase(job, "teardown", teardown_plan)
+        except Exception:
+            self.jobs.release(job)
+            raise
+        return self._launch(job, self._run_switch(job, room, incoming, teardown_plan, teardown_phase))
+
+    async def _run_switch(self, job: ScenarioJob, room: str, incoming: Scenario,
+                          teardown_plan: ReconcilePlan, teardown_phase: JobPhase) -> None:
+        devices = self.device_manager.devices
+        try:
+            teardown = await execute_plan(
+                teardown_plan, devices, on_step=self._step_observer(job, teardown_phase)
+            )
+            # The activation is planned AFTER the teardown ran (its diff reads the state
+            # the teardown left — the `graceful: false` semantics depend on this order).
+            activation_plan = build_plan(incoming.definition, self.topology, devices)
+            activation_phase = await self._add_phase(job, "activation", activation_plan)
+            activation = await execute_plan(
+                activation_plan, devices, on_step=self._step_observer(job, activation_phase)
+            )
+
+            self.active[room] = incoming
+            # Capture the activation's manual notes; get_scenario_state() threads them into the
+            # live recompute so /scenario/state surfaces them (single source of truth).
+            self._activation_manual_steps[room] = [
+                ManualStep(node=m.node, instruction=m.instruction) for m in activation.manual_steps
+            ]
+            await self._persist_state(room)
+
+            job.failures = self._failures_of(teardown, activation)
+            if job.failures:
+                logger.warning(
+                    f"Scenario '{incoming.scenario_id}' activated with {len(job.failures)} failed step(s); "
+                    f"correct affected devices via their UI page"
+                )
+            logger.info(f"Successfully switched to scenario '{incoming.scenario_id}' (reconciler)")
+        except asyncio.CancelledError:
+            # Process shutdown: the executor stopped at a step boundary; no terminal event.
+            self.jobs.release(job)
+            raise
+        except Exception as e:
+            logger.error(f"Error switching to scenario '{incoming.scenario_id}': {str(e)}", exc_info=True)
+            job.failures.append({"device": "scenario_manager", "command": "switch", "error": str(e)})
+        await self._seal(job, room)
+
+    async def switch_scenario(self, target_id: str, *, graceful: bool = True,
+                              source: str = "rest") -> Dict[str, Any]:
         """
         Perform a diff-based transition via the reconciler, scoped to the target
         scenario's ROOM (rooms are the concurrency unit — another room's active
-        scenario is untouched).
+        scenario is untouched), and WAIT for it: the `wait: true` door.
 
         Devices involved in the room's outgoing but not the incoming scenario are
         powered off; the incoming activity is then reconciled from topology +
@@ -247,80 +504,78 @@ class ScenarioManager:
             target_id: ID of the scenario to switch to
             graceful: If True (default), power off only outgoing-only devices;
                       if False, power off every outgoing device before activation
+            source: who asked — `canonical` | `rest` | `wb_card` (the job record)
+
+        Returns `{success, powered_off, failures, job_id, no_op}`.
 
         Raises:
             ValueError: If the target scenario doesn't exist
+            ScenarioJobInProgress: a job is already running in the room
         """
-        # DEBUG: Log scenario switch initiation
-        logger.debug(f"[SCENARIO_DEBUG] switch_scenario called: target_id={target_id}, graceful={graceful}")
-
-        # Validate target scenario exists
-        if target_id not in self.scenario_map:
-            raise ValueError(f"Scenario '{target_id}' not found")
-
-        incoming = self.scenario_map[target_id]
-        room = self._room_of(incoming)
-        outgoing = self.active.get(room)
-
-        # DEBUG: Log scenario transition details
-        logger.debug(f"[SCENARIO_DEBUG] Transition in room '{room}': outgoing={outgoing.scenario_id if outgoing else 'None'}, incoming={incoming.scenario_id}")
-
-        # If already active in its room, do nothing
-        if outgoing and outgoing.scenario_id == incoming.scenario_id:
-            logger.info(f"Scenario '{target_id}' is already active")
-            return {
-                "success": True,
-                "powered_off": [],
-                "failures": []
-            }
-
-        logger.info(
-            f"Switching room '{room}' from '{outgoing.scenario_id if outgoing else 'None'}' "
-            f"to '{incoming.scenario_id}'"
-        )
-
-        # Derive + execute the transition plan from topology + capabilities.
-        return await self._switch_via_reconciler(room, outgoing, incoming, graceful=graceful)
+        job = await self.start_switch(target_id, graceful=graceful, source=source)
+        if job is None:
+            return {"success": True, "powered_off": [], "failures": [], "job_id": None, "no_op": True}
+        await job.done.wait()
+        return self._job_result(job)
 
     def _involved_devices(self, scenario: Scenario) -> set:
         """Devices a scenario touches, derived from the topology."""
         return resolve_targets(scenario.definition, self.topology)[2]
 
-    async def _switch_via_reconciler(self, room: str, outgoing, incoming, *, graceful: bool) -> Dict[str, Any]:
-        """Diff-based transition within one room: power off the room's outgoing-only devices,
-        then reconcile the incoming activity from topology + capabilities + assumed state."""
+    async def start_stop(self, room_id: str, *, source: str = "rest") -> Optional[ScenarioJob]:
+        """Accept a stop job for the room (power its active scenario down) and start it.
+
+        Returns None when the room is idle and no job runs (`no_op`). Raises
+        ScenarioJobInProgress when a job is running in the room.
+        """
+        sc = self.active.get(room_id)
+        if sc is None and self.jobs.running(room_id) is None:
+            return None
         devices = self.device_manager.devices
-        incoming_involved = resolve_targets(incoming.definition, self.topology)[2]
-        outgoing_involved = self._involved_devices(outgoing) if outgoing else set()
-        to_power_off = (outgoing_involved - incoming_involved) if graceful else outgoing_involved
+        job = ScenarioJob(
+            job_id=new_job_id(room_id), room_id=room_id, kind="stop", target="none",
+            from_=sc.scenario_id if sc else "none", source=source,
+            max_duration_ms=deactivate_ceiling_ms(
+                self._room_definitions(room_id), self.topology, devices
+            ),
+        )
+        await self._accept_job(job)
+        assert sc is not None  # the room was busy otherwise, and accept() raised
+        logger.info(f"Deactivating scenario '{sc.scenario_id}' in '{room_id}' (powering off its devices; job {job.job_id})")
+        try:
+            involved = sorted(resolve_targets(sc.definition, self.topology)[2])
+            job.powered_off = involved
+            plan = build_power_off_plan(involved, devices)
+            phase = await self._add_phase(job, "teardown", plan)
+        except Exception:
+            self.jobs.release(job)
+            raise
+        return self._launch(job, self._run_stop(job, room_id, sc, plan, phase))
 
-        teardown = await execute_plan(build_power_off_plan(sorted(to_power_off), devices), devices)
-        activation = await execute_plan(build_plan(incoming.definition, self.topology, devices), devices)
-
-        self.active[room] = incoming
-        # Capture the activation's manual notes; get_scenario_state() threads them into the
-        # live recompute so /scenario/state surfaces them (single source of truth).
-        self._activation_manual_steps[room] = [
-            ManualStep(node=m.node, instruction=m.instruction) for m in activation.manual_steps
-        ]
-        await self._persist_state(room)
-        await self._notify_active_changed(room)
-
-        failures = [
-            {"device": a.device_id, "command": a.command, "error": err}
-            for a, err in (teardown.failures + activation.failures)
-        ]
-        if failures:
-            logger.warning(
-                f"Scenario '{incoming.scenario_id}' activated with {len(failures)} failed step(s); "
-                f"correct affected devices via their UI page"
-            )
-        logger.info(f"Successfully switched to scenario '{incoming.scenario_id}' (reconciler)")
-        return {
-            "success": not failures,
-            "powered_off": sorted(to_power_off),
-            "failures": failures,
-        }
+    async def _run_stop(self, job: ScenarioJob, room: str, sc: Scenario,
+                        plan: ReconcilePlan, phase: JobPhase) -> None:
+        devices = self.device_manager.devices
+        try:
+            exec_result = await execute_plan(plan, devices, on_step=self._step_observer(job, phase))
+            job.failures = self._failures_of(exec_result)
+        except asyncio.CancelledError:
+            self.jobs.release(job)
+            raise
+        except Exception as e:
+            logger.error(f"Error deactivating scenario '{sc.scenario_id}': {str(e)}")
+            job.failures.append({"device": "scenario_manager", "command": "stop", "error": str(e)})
+        finally:
+            self.active.pop(room, None)
+            self._activation_manual_steps.pop(room, None)
+            # Clear the persisted intent atomically with the in-memory clear — otherwise a
+            # bridge restart resurrects the deactivated scenario via _restore_state and powers
+            # the gear back on. deactivate() ONLY: process shutdown() deliberately leaves the
+            # keys so still-active scenarios survive a restart.
+            try:
+                await self.state_repository.delete(self._room_key(room))
+            except Exception as e:
+                logger.error(f"Failed to clear persisted active scenario for '{room}': {str(e)}")
+        await self._seal(job, room)
 
     # --- SCN-11: per-device force-reconcile (user-mediated desync repair) --------
 
@@ -347,8 +602,8 @@ class ScenarioManager:
         )
 
     async def force_reconcile_device(
-        self, scenario_id: str, device_id: str
-    ) -> Tuple[ReconcilePlan, ExecutionResult]:
+        self, scenario_id: str, device_id: str, *, source: str = "rest"
+    ) -> Tuple[ReconcilePlan, ExecutionResult, ScenarioJob]:
         """Force ONE device into the active scenario's desired state (SCN-11).
 
         Builds the single-device forced plan (diff skipped, ``force`` injected,
@@ -372,8 +627,39 @@ class ScenarioManager:
             "force-reconcile '%s' in scenario '%s': %d action(s)",
             device_id, scenario_id, len(plan.actions),
         )
-        result = await execute_plan(plan, devices)
-        return plan, result
+        # SCN-19: a one-device forced plan is a plan — it runs as a `reconcile` job under
+        # the room's lock (one phase, `activation`), terminal event `scenario_switched`.
+        room = self._room_of(scenario)
+        job = ScenarioJob(
+            job_id=new_job_id(room), room_id=room, kind="reconcile", target=scenario_id,
+            from_=scenario_id, source=source, max_duration_ms=plan_ceiling_ms(plan.actions),
+        )
+        await self._accept_job(job)
+        try:
+            phase = await self._add_phase(job, "activation", plan)
+        except Exception:
+            self.jobs.release(job)
+            raise
+        holder: Dict[str, ExecutionResult] = {}
+        self._launch(job, self._run_reconcile(job, room, plan, phase, holder))
+        await job.done.wait()
+        return plan, holder.get("result", ExecutionResult(failures=[])), job
+
+    async def _run_reconcile(self, job: ScenarioJob, room: str, plan: ReconcilePlan,
+                             phase: JobPhase, holder: Dict[str, ExecutionResult]) -> None:
+        try:
+            result = await execute_plan(
+                plan, self.device_manager.devices, on_step=self._step_observer(job, phase)
+            )
+            holder["result"] = result
+            job.failures = self._failures_of(result)
+        except asyncio.CancelledError:
+            self.jobs.release(job)
+            raise
+        except Exception as e:
+            logger.error(f"Error force-reconciling in '{room}': {str(e)}", exc_info=True)
+            job.failures.append({"device": "scenario_manager", "command": "reconcile", "error": str(e)})
+        await self._seal(job, room)
 
     async def execute_role_action(self, role: str, command: str, params: Dict[str, Any]) -> Any:
         """
@@ -538,8 +824,10 @@ class ScenarioManager:
         await self._persist_state(room)
         await self._notify_active_changed(room)
     
-    async def deactivate(self, room_id: Optional[str] = None) -> Dict[str, Any]:
-        """Deactivate a room's active scenario by powering off the devices it involves.
+    async def deactivate(self, room_id: Optional[str] = None, *,
+                         source: str = "rest") -> Dict[str, Any]:
+        """Deactivate a room's active scenario by powering off the devices it involves,
+        and WAIT for it (the `wait: true` door of `start_stop`).
 
         This is the explicit user action ("turn it all off", via POST /scenario/shutdown or
         the room's Scenario Manager `scenario.off`) and is DISTINCT from process
@@ -547,42 +835,50 @@ class ScenarioManager:
 
         Args:
             room_id: The room to deactivate. None = deactivate EVERY room's active
-                     scenario (whole-house off).
+                     scenario (whole-house off) — one job per room, in turn.
+            source: who asked (the job record).
+
+        Returns `{success, powered_off, manual_steps, failures, job_id, no_op}`; for the
+        whole-house form `job_id` is the last room's. Raises ScenarioJobInProgress when a
+        job is running in the room.
         """
         rooms = [room_id] if room_id is not None else sorted(self.active)
-        result: Dict[str, Any] = {"success": True, "powered_off": [], "manual_steps": [], "failures": []}
-
+        result: Dict[str, Any] = {
+            "success": True, "powered_off": [], "manual_steps": [], "failures": [],
+            "job_id": None, "no_op": True,
+        }
         for room in rooms:
-            sc = self.active.get(room)
-            if not sc:
+            job = await self.start_stop(room, source=source)
+            if job is None:
                 continue
-            logger.info(f"Deactivating scenario '{sc.scenario_id}' in '{room}' (powering off its devices)")
-            try:
-                devices = self.device_manager.devices
-                involved = sorted(resolve_targets(sc.definition, self.topology)[2])
-                exec_result = await execute_plan(build_power_off_plan(involved, devices), devices)
-                result["powered_off"].extend(involved)
-                result["failures"].extend(
-                    {"device": a.device_id, "command": a.command, "error": err}
-                    for a, err in exec_result.failures
-                )
-                result["success"] = result["success"] and exec_result.success
-            except Exception as e:
-                logger.error(f"Error deactivating scenario '{sc.scenario_id}': {str(e)}")
-                result["success"] = False
-            finally:
-                self.active.pop(room, None)
-                self._activation_manual_steps.pop(room, None)
-                # Clear the persisted intent atomically with the in-memory clear — otherwise a
-                # bridge restart resurrects the deactivated scenario via _restore_state and powers
-                # the gear back on. deactivate() ONLY: process shutdown() deliberately leaves the
-                # keys so still-active scenarios survive a restart.
-                try:
-                    await self.state_repository.delete(self._room_key(room))
-                except Exception as e:
-                    logger.error(f"Failed to clear persisted active scenario for '{room}': {str(e)}")
-                await self._notify_active_changed(room)
+            await job.done.wait()
+            result["no_op"] = False
+            result["job_id"] = job.job_id
+            result["powered_off"].extend(job.powered_off)
+            result["failures"].extend(job.failures)
+            result["success"] = result["success"] and job.succeeded
         return result
+
+    async def wait_for_jobs(self, extra_s: float = 5.0) -> bool:
+        """Block until every running job reached its terminal event, bounded by the
+        largest running ceiling plus `extra_s` (POST /reload, §4). Returns False when
+        the bound fired with a job still running."""
+        running = self.jobs.running_jobs()
+        if not running:
+            return True
+        bound = max(j.max_duration_ms for j in running) / 1000 + extra_s
+        logger.info(f"waiting for {len(running)} running scenario job(s), up to {bound:.0f} s")
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*(j.done.wait() for j in running)), timeout=bound
+            )
+            return True
+        except asyncio.TimeoutError:
+            logger.warning(
+                "scenario job(s) still running after the bound; proceeding: "
+                + ", ".join(j.job_id for j in self.jobs.running_jobs())
+            )
+            return False
 
     async def shutdown(self) -> None:
         """Process shutdown: stop tracking active scenarios WITHOUT touching the hardware.
@@ -591,6 +887,13 @@ class ScenarioManager:
         stay active on the devices and the assumed state is preserved across the restart. Use
         ``deactivate()`` for the explicit "turn it off" action.
         """
+        # SCN-19: a running job never reaches its terminal event across a process
+        # shutdown — the executor stops at a step boundary (§4 "not held across shutdown").
+        for room, task in list(self._job_tasks.items()):
+            if not task.done():
+                logger.info(f"Bridge shutdown: cancelling the running scenario job in '{room}'")
+                task.cancel()
+        self._job_tasks.clear()
         for room, sc in self.active.items():
             logger.info(
                 f"Bridge shutdown: leaving scenario '{sc.scenario_id}' active in '{room}' "

@@ -716,7 +716,7 @@
           },
           "wait": {
             "default": true,
-            "description": "Wait for the value-topic echo and return post-action state (voice wants a speakable result). False = fire-and-return-current-state (the UI's mash-click mode — button presses must not serialize on echo waits).",
+            "description": "Wait for the value-topic echo and return post-action state (voice wants a speakable result). False = fire-and-return-current-state (the UI's mash-click mode — button presses must not serialize on echo waits). On a Scenario Manager's `scenario` capability `wait: false` returns `202` with a job to follow (since contract v1.12).",
             "title": "Wait",
             "type": "boolean"
           }
@@ -809,7 +809,7 @@
         "type": "object"
       },
       "CanonicalError": {
-        "description": "Error envelope. `field` + `reason` populated for param_invalid; both optional.",
+        "description": "Error envelope. `field` + `reason` populated for param_invalid; both optional.\n`job_id` is set for `job_in_progress` only — the running job the caller may follow.",
         "properties": {
           "code": {
             "$ref": "#/components/schemas/CanonicalErrorCode"
@@ -824,6 +824,18 @@
               }
             ],
             "title": "Field"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For `job_in_progress`: the id of the scenario job already running in the room (follow it via GET /scenario/jobs/{job_id} or the scenarios event stream).",
+            "title": "Job Id"
           },
           "message": {
             "title": "Message",
@@ -849,7 +861,7 @@
         "type": "object"
       },
       "CanonicalErrorCode": {
-        "description": "Structured error codes for the canonical endpoint. HTTP status mirrors these\n(see /devices/{id}/canonical responses): 404 for the three 'not supported' codes,\n400 for param_invalid, 503 for device_unreachable, 500 for internal_error.",
+        "description": "Structured error codes for the canonical endpoint. HTTP status mirrors these\n(see /devices/{id}/canonical responses): 404 for the three 'not supported' codes,\n400 for param_invalid, 503 for device_unreachable, 500 for internal_error,\n409 for job_in_progress (a scenario job is already running in the room; the error\nnames it in `job_id`).",
         "enum": [
           "device_not_found",
           "capability_not_supported",
@@ -861,7 +873,8 @@
           "role_unbound",
           "no_group_members",
           "no_default_device",
-          "fanout_not_allowed"
+          "fanout_not_allowed",
+          "job_in_progress"
         ],
         "title": "CanonicalErrorCode",
         "type": "string"
@@ -2038,6 +2051,18 @@
             },
             "title": "Failures",
             "type": "array"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The `reconcile` job that ran the forced chain (since contract v1.12).",
+            "title": "Job Id"
           },
           "success": {
             "title": "Success",
@@ -3876,9 +3901,665 @@
         "title": "ScenarioDefinition",
         "type": "object"
       },
+      "ScenarioJob": {
+        "description": "One run of a room's scenario chain: a switch, a stop or a one-device reconcile.\nKept in memory for the running job and the last 20 finished ones per room; after a\nbridge restart every earlier job is unknown (`404`, `job_unknown`).",
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wall time from acceptance to the terminal event.",
+            "title": "Duration Ms"
+          },
+          "failures": {
+            "description": "`{device, command, error}` per failed or unconfirmed step.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 UTC, at the terminal event.",
+            "title": "Finished At"
+          },
+          "from": {
+            "description": "The room's active scenario at acceptance (`none` if idle).",
+            "title": "From",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "switch",
+              "stop",
+              "reconcile"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_duration_ms": {
+            "description": "The catalog's published ceiling for the target.",
+            "title": "Max Duration Ms",
+            "type": "integer"
+          },
+          "phases": {
+            "description": "Phases appear as they are planned.",
+            "items": {
+              "$ref": "#/components/schemas/ScenarioJobPhase"
+            },
+            "title": "Phases",
+            "type": "array"
+          },
+          "powered_off": {
+            "description": "Devices the teardown powered off.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Powered Off",
+            "type": "array"
+          },
+          "result_scenario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The room's active scenario after the job (`none` after a stop).",
+            "title": "Result Scenario"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "source": {
+            "description": "Which door started the job.",
+            "enum": [
+              "canonical",
+              "rest",
+              "wb_card"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "description": "ISO-8601 UTC, at acceptance.",
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "description": "`failed` = the chain completed with at least one step failed or not confirmed.",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "target": {
+            "description": "The scenario id, or `none` for a stop.",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "room_id",
+          "kind",
+          "target",
+          "from",
+          "source",
+          "state",
+          "max_duration_ms",
+          "started_at"
+        ],
+        "title": "ScenarioJob",
+        "type": "object"
+      },
+      "ScenarioJobAccepted": {
+        "description": "The `202` body of a REST scenario request with `wait: false`.",
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "switch",
+              "stop",
+              "reconcile"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_duration_ms": {
+            "title": "Max Duration Ms",
+            "type": "integer"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "room_id",
+          "kind",
+          "target",
+          "max_duration_ms"
+        ],
+        "title": "ScenarioJobAccepted",
+        "type": "object"
+      },
+      "ScenarioJobInProgressDetail": {
+        "description": "The `detail` of a REST `409` when a job is running in the room.",
+        "properties": {
+          "code": {
+            "const": "job_in_progress",
+            "default": "job_in_progress",
+            "title": "Code",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "switch",
+              "stop",
+              "reconcile"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "job_id",
+          "kind",
+          "target"
+        ],
+        "title": "ScenarioJobInProgressDetail",
+        "type": "object"
+      },
+      "ScenarioJobInProgressResponse": {
+        "description": "REST `409` body while a job runs in the room.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ScenarioJobInProgressDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ScenarioJobInProgressResponse",
+        "type": "object"
+      },
+      "ScenarioJobManualStep": {
+        "properties": {
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "node": {
+            "title": "Node",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node",
+          "instruction"
+        ],
+        "title": "ScenarioJobManualStep",
+        "type": "object"
+      },
+      "ScenarioJobPhase": {
+        "description": "A phase of the chain — `teardown` (powering the outgoing devices down) or\n`activation` (bringing the incoming scenario up in topology order).",
+        "properties": {
+          "manual_steps": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioJobManualStep"
+            },
+            "title": "Manual Steps",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "teardown",
+              "activation"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioJobStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "phase",
+          "steps"
+        ],
+        "title": "ScenarioJobPhase",
+        "type": "object"
+      },
+      "ScenarioJobStartedEvent": {
+        "description": "Once per job, before any device is touched.",
+        "properties": {
+          "eventType": {
+            "const": "scenario_job_started",
+            "default": "scenario_job_started",
+            "title": "Eventtype",
+            "type": "string"
+          },
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "switch",
+              "stop",
+              "reconcile"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_duration_ms": {
+            "title": "Max Duration Ms",
+            "type": "integer"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "canonical",
+              "rest",
+              "wb_card"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "room_id",
+          "kind",
+          "target",
+          "from",
+          "source",
+          "max_duration_ms",
+          "timestamp"
+        ],
+        "title": "ScenarioJobStartedEvent",
+        "type": "object"
+      },
+      "ScenarioJobStep": {
+        "description": "One planned device step of a job phase, with its execution status.",
+        "properties": {
+          "command": {
+            "description": "The device's native command.",
+            "title": "Command",
+            "type": "string"
+          },
+          "delay_ms": {
+            "default": 0,
+            "description": "Settle wait after a no-feedback step.",
+            "title": "Delay Ms",
+            "type": "integer"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "domain": {
+            "description": "`power` or `input`.",
+            "title": "Domain",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The executor's error text for a failed or unconfirmed step.",
+            "title": "Error"
+          },
+          "feedback": {
+            "default": false,
+            "description": "Whether the step is confirmed by polling the device's reported state.",
+            "title": "Feedback",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 UTC.",
+            "title": "Finished At"
+          },
+          "index": {
+            "description": "Position of the step within its phase (0-based).",
+            "title": "Index",
+            "type": "integer"
+          },
+          "poll_timeout_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long a feedback step is polled before it counts as not confirmed.",
+            "title": "Poll Timeout Ms"
+          },
+          "pre_delay_ms": {
+            "default": 0,
+            "description": "Wait before the step (from a topology ordering edge).",
+            "title": "Pre Delay Ms",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 UTC.",
+            "title": "Started At"
+          },
+          "status": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "running",
+              "done",
+              "failed",
+              "not_confirmed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target": {
+            "description": "The canonical value the step drives the domain to.",
+            "title": "Target"
+          },
+          "zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Power zone, for multi-zone devices.",
+            "title": "Zone"
+          }
+        },
+        "required": [
+          "index",
+          "device_id",
+          "domain",
+          "command"
+        ],
+        "title": "ScenarioJobStep",
+        "type": "object"
+      },
+      "ScenarioJobUnknownDetail": {
+        "description": "The `detail` of `GET /scenario/jobs/{job_id}` `404` — including every id from\nbefore the last bridge restart.",
+        "properties": {
+          "code": {
+            "const": "job_unknown",
+            "default": "job_unknown",
+            "title": "Code",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "ScenarioJobUnknownDetail",
+        "type": "object"
+      },
+      "ScenarioJobUnknownResponse": {
+        "description": "`GET /scenario/jobs/{job_id}` `404` body.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ScenarioJobUnknownDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ScenarioJobUnknownResponse",
+        "type": "object"
+      },
+      "ScenarioJobsByRoom": {
+        "properties": {
+          "rooms": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScenarioRoomJobs"
+            },
+            "title": "Rooms",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rooms"
+        ],
+        "title": "ScenarioJobsByRoom",
+        "type": "object"
+      },
+      "ScenarioPhaseEvent": {
+        "description": "Once per phase, when the phase is planned: its steps and the manual steps it\nneeds from a person.",
+        "properties": {
+          "eventType": {
+            "const": "scenario_phase",
+            "default": "scenario_phase",
+            "title": "Eventtype",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "manual_steps": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioJobManualStep"
+            },
+            "title": "Manual Steps",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "teardown",
+              "activation"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioPhasePlannedStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "room_id",
+          "phase",
+          "steps",
+          "timestamp"
+        ],
+        "title": "ScenarioPhaseEvent",
+        "type": "object"
+      },
+      "ScenarioPhasePlannedStep": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "delay_ms": {
+            "default": 0,
+            "title": "Delay Ms",
+            "type": "integer"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "feedback": {
+            "default": false,
+            "title": "Feedback",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "poll_timeout_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Poll Timeout Ms"
+          },
+          "pre_delay_ms": {
+            "default": 0,
+            "title": "Pre Delay Ms",
+            "type": "integer"
+          },
+          "target": {
+            "default": null,
+            "title": "Target"
+          },
+          "zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Zone"
+          }
+        },
+        "required": [
+          "index",
+          "device_id",
+          "domain",
+          "command"
+        ],
+        "title": "ScenarioPhasePlannedStep",
+        "type": "object"
+      },
       "ScenarioResponse": {
         "description": "Base response model for scenario operations.\n\nManual notes from the activation (e.g. \"set the Dodocus to LD\") are NOT on this\nresponse — they live on ``ScenarioState.manual_steps`` (single source of truth, fetched\nvia ``GET /scenario/state``; survives page reload).",
         "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The scenario job that ran the chain (`GET /scenario/jobs/{job_id}` has every step); absent when nothing ran.",
+            "title": "Job Id"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -3893,6 +4574,145 @@
           "message"
         ],
         "title": "ScenarioResponse",
+        "type": "object"
+      },
+      "ScenarioRoomJobs": {
+        "description": "A room's running job and its most recent finished ones, newest first.",
+        "properties": {
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioJob"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScenarioJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "room_id"
+        ],
+        "title": "ScenarioRoomJobs",
+        "type": "object"
+      },
+      "ScenarioShutdownEvent": {
+        "description": "The terminal event of a stop job.",
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Ms"
+          },
+          "eventType": {
+            "const": "scenario_shutdown",
+            "default": "scenario_shutdown",
+            "title": "Eventtype",
+            "type": "string"
+          },
+          "failures": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failures"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Job Id"
+          },
+          "job_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "succeeded",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Job State"
+          },
+          "powered_off": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Powered Off"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "scenario_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scenario Id"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "timestamp"
+        ],
+        "title": "ScenarioShutdownEvent",
         "type": "object"
       },
       "ScenarioState": {
@@ -3924,6 +4744,224 @@
           "scenario_id"
         ],
         "title": "ScenarioState",
+        "type": "object"
+      },
+      "ScenarioStepEvent": {
+        "description": "Twice per step: `started` just before dispatch, then `done`, `failed` or\n`not_confirmed` after the step's confirmation gate. `elapsed_ms` is since acceptance.",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "eventType": {
+            "const": "scenario_step",
+            "default": "scenario_step",
+            "title": "Eventtype",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "teardown",
+              "activation"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "started",
+              "done",
+              "failed",
+              "not_confirmed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target": {
+            "default": null,
+            "title": "Target"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Zone"
+          }
+        },
+        "required": [
+          "job_id",
+          "room_id",
+          "phase",
+          "index",
+          "device_id",
+          "domain",
+          "command",
+          "status",
+          "elapsed_ms",
+          "timestamp"
+        ],
+        "title": "ScenarioStepEvent",
+        "type": "object"
+      },
+      "ScenarioSwitchedEvent": {
+        "description": "The terminal event of a switch or a reconcile job (and the tracking notification\nof a startup restore, which carries no `job_id`).",
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Ms"
+          },
+          "eventType": {
+            "const": "scenario_switched",
+            "default": "scenario_switched",
+            "title": "Eventtype",
+            "type": "string"
+          },
+          "failures": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failures"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Job Id"
+          },
+          "job_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "succeeded",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Job State"
+          },
+          "powered_off": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Powered Off"
+          },
+          "room_id": {
+            "title": "Room Id",
+            "type": "string"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The scenario's `ScenarioState`.",
+            "title": "State"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "room_id",
+          "timestamp"
+        ],
+        "title": "ScenarioSwitchedEvent",
         "type": "object"
       },
       "ServiceInfo": {
@@ -3961,6 +4999,12 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "wait": {
+            "default": true,
+            "description": "Wait for the chain to finish (default). `false` returns `202` at acceptance with the job to follow (since contract v1.12).",
+            "title": "Wait",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3975,6 +5019,12 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "wait": {
+            "default": true,
+            "description": "Wait for the chain to finish (default). `false` returns `202` at acceptance with the job to follow (since contract v1.12).",
+            "title": "Wait",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4058,6 +5108,12 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "wait": {
+            "default": true,
+            "description": "Wait for the chain to finish (default). `false` returns `202` at acceptance with the job to follow (since contract v1.12).",
+            "title": "Wait",
+            "type": "boolean"
           }
         },
         "required": [
@@ -5000,7 +6056,7 @@
     },
     "/devices/{device_id}/canonical": {
       "post": {
-        "description": "Voice-friendly canonical action endpoint.\n\nBody: `{capability, action, params?}` -- the same canonical tuple Irene parses from\nan utterance. The bridge resolves it through the device's capability map\n(class → profile → per-device override) and invokes the native command\nvia `perform_action`.\n\nSynchronous with a ~500 ms timeout: the response carries the **post-action**\ndevice state once the value-topic echo arrives. For WB-passthrough devices the\necho flows through the MQTT subscription chain → `update_state` → registered\ncallbacks; we register a one-shot callback for the duration of the call so the\nhandler unblocks the instant the device acknowledges. AV drivers update state\nsynchronously inside `perform_action`, so the wait returns immediately for them.\n\nError codes (HTTP status mirrors `error.code`):\n  - `device_not_found` (404)\n  - `capability_not_supported` (404)\n  - `action_not_supported` (404)\n  - `param_invalid` (400) - currently mapped from any perform_action failure with\n    param-shaped error text; refined later if/when handlers distinguish cleanly.\n  - `device_unreachable` (503) - the device handler reported a reachability\n    failure (connection lost/refused), the echo wait timed out, or\n    `state.reachable` flipped False during the wait (a per-control `meta/error`\n    flag landed, per the Wirenboard MQTT convention).\n  - `internal_error` (500) - everything else.",
+        "description": "Voice-friendly canonical action endpoint.\n\nBody: `{capability, action, params?}` -- the same canonical tuple Irene parses from\nan utterance. The bridge resolves it through the device's capability map\n(class → profile → per-device override) and invokes the native command\nvia `perform_action`.\n\nSynchronous with a ~500 ms timeout: the response carries the **post-action**\ndevice state once the value-topic echo arrives. For WB-passthrough devices the\necho flows through the MQTT subscription chain → `update_state` → registered\ncallbacks; we register a one-shot callback for the duration of the call so the\nhandler unblocks the instant the device acknowledges. AV drivers update state\nsynchronously inside `perform_action`, so the wait returns immediately for them.\n\nError codes (HTTP status mirrors `error.code`):\n  - `device_not_found` (404)\n  - `capability_not_supported` (404)\n  - `action_not_supported` (404)\n  - `param_invalid` (400) - currently mapped from any perform_action failure with\n    param-shaped error text; refined later if/when handlers distinguish cleanly.\n  - `device_unreachable` (503) - the device handler reported a reachability\n    failure (connection lost/refused), the echo wait timed out, or\n    `state.reachable` flipped False during the wait (a per-control `meta/error`\n    flag landed, per the Wirenboard MQTT convention).\n  - `internal_error` (500) - everything else.\n  - `job_in_progress` (409) - a Scenario Manager's `scenario` request while a\n    scenario job runs in the room; `error.job_id` names it (since contract v1.12).\n\nOn a Scenario Manager's `scenario` capability `wait: false` returns `202` with\n`state.job_id` + `state.max_duration_ms`: the job is accepted, not done — follow it\nvia `GET /scenario/jobs/{job_id}` or the scenarios event stream.",
         "operationId": "execute_canonical_action_devices__device_id__canonical_post",
         "parameters": [
           {
@@ -5034,6 +6090,16 @@
             },
             "description": "Successful Response"
           },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalActionResponse"
+                }
+              }
+            },
+            "description": "A scenario job was accepted (`wait: false` on a Scenario Manager's `scenario` capability): `state.job_id` and `state.max_duration_ms` — `success: true` means accepted, not done."
+          },
           "400": {
             "content": {
               "application/json": {
@@ -5053,6 +6119,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalActionResponse"
+                }
+              }
+            },
+            "description": "`job_in_progress`: a scenario job is already running in the room (`error.job_id` names it); or a Scenario Manager proxy refusal (`no_active_scenario`, `role_unbound`)."
           },
           "422": {
             "content": {
@@ -5904,6 +6980,119 @@
         ]
       }
     },
+    "/scenario/jobs": {
+      "get": {
+        "description": "Scenario jobs by room (since contract v1.12) — for pollers and for the UI after a\npage reload (\"is something running in my room?\"). Jobs live in memory: after a bridge\nrestart the lists are empty.",
+        "operationId": "list_scenario_jobs_scenario_jobs_get",
+        "parameters": [
+          {
+            "description": "A room id: its running job and the last 20 finished ones, newest first. Without it, every room that has had a job since the bridge started.",
+            "in": "query",
+            "name": "room",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A room id: its running job and the last 20 finished ones, newest first. Without it, every room that has had a job since the bridge started.",
+              "title": "Room"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ScenarioRoomJobs"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScenarioJobsByRoom"
+                    }
+                  ],
+                  "title": "Response List Scenario Jobs Scenario Jobs Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scenario Jobs",
+        "tags": [
+          "Scenarios"
+        ]
+      }
+    },
+    "/scenario/jobs/{job_id}": {
+      "get": {
+        "description": "One scenario job (since contract v1.12): its phases, every step with its status,\nfailures and result. The record is the truth a consumer reconciles against after a\nreconnect; `404 job_unknown` for an id the bridge does not hold — every id from before\nits last restart (`GET /scenario/state` says what is active now).",
+        "operationId": "get_scenario_job_scenario_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobUnknownResponse"
+                }
+              }
+            },
+            "description": "`detail.code = job_unknown` — including every id from before the last bridge restart."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scenario Job",
+        "tags": [
+          "Scenarios"
+        ]
+      }
+    },
     "/scenario/role_action": {
       "post": {
         "description": "Execute an action on a device bound to a role in the current scenario.\n\nArgs:\n    data: The role action request with role, command and params\n    \nReturns:\n    Dict[str, Any]: The result of the command execution\n    \nRaises:\n    HTTPException: If no active scenario or an error occurs",
@@ -5973,6 +7162,26 @@
             },
             "description": "Successful Response"
           },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobAccepted"
+                }
+              }
+            },
+            "description": "`wait: false`: the job was accepted (not done) — follow it via `GET /scenario/jobs/{job_id}` or the scenarios event stream."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobInProgressResponse"
+                }
+              }
+            },
+            "description": "`detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6014,6 +7223,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobAccepted"
+                }
+              }
+            },
+            "description": "`wait: false`: the job was accepted (not done) — follow it via `GET /scenario/jobs/{job_id}` or the scenarios event stream."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobInProgressResponse"
+                }
+              }
+            },
+            "description": "`detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail."
           },
           "422": {
             "content": {
@@ -6086,7 +7315,7 @@
     },
     "/scenario/switch": {
       "post": {
-        "description": "Switch to a different scenario.\n\nThis endpoint performs a transition between scenarios, handling\ndevice state changes efficiently.\n\nArgs:\n    data: The switch scenario request with scenario ID and graceful flag\n    \nReturns:\n    ScenarioResponse: Status of the operation\n    \nRaises:\n    HTTPException: If scenario not found or an error occurs",
+        "description": "Switch to a different scenario.\n\nThis endpoint performs a transition between scenarios, handling\ndevice state changes efficiently. The chain runs as the room's scenario job:\n`wait: true` (default) returns when it ended, `wait: false` returns `202` with the\naccepted job; a room with a running job answers `409 job_in_progress`.\n\nArgs:\n    data: The switch scenario request with scenario ID and graceful flag\n    \nReturns:\n    ScenarioResponse: Status of the operation\n    \nRaises:\n    HTTPException: If scenario not found or an error occurs",
         "operationId": "switch_scenario_scenario_switch_post",
         "requestBody": {
           "content": {
@@ -6109,6 +7338,26 @@
             },
             "description": "Successful Response"
           },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobAccepted"
+                }
+              }
+            },
+            "description": "`wait: false`: the job was accepted (not done) — follow it via `GET /scenario/jobs/{job_id}` or the scenarios event stream."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobInProgressResponse"
+                }
+              }
+            },
+            "description": "`detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -6128,7 +7377,7 @@
     },
     "/scenario/{id}/force_reconcile": {
       "post": {
-        "description": "Force ONE device into the active scenario's desired state — the\nbelieved-vs-desired diff is skipped (the belief may be wrong; the user picking the\nrow is the feedback channel), driver idempotence guards are bypassed via the\nreserved `force` param, and toggle power claims the plan target (`assume_state`).\nRuns the device's chain through the normal executor (gates + polls); worst case a\npoll-timeout wait, so the call can take seconds.",
+        "description": "Force ONE device into the active scenario's desired state — the\nbelieved-vs-desired diff is skipped (the belief may be wrong; the user picking the\nrow is the feedback channel), driver idempotence guards are bypassed via the\nreserved `force` param, and toggle power claims the plan target (`assume_state`).\nRuns the device's chain through the normal executor (gates + polls); worst case a\npoll-timeout wait, so the call can take seconds. It runs as a `reconcile` job under\nthe room's lock: `409 job_in_progress` while another job runs there.",
         "operationId": "force_reconcile_device_scenario__id__force_reconcile_post",
         "parameters": [
           {
@@ -6161,6 +7410,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioJobInProgressResponse"
+                }
+              }
+            },
+            "description": "`detail.code = job_in_progress` (a structured body naming the running job) — or the scenario-state refusal as a string detail."
           },
           "422": {
             "content": {

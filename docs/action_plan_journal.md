@@ -28,6 +28,26 @@ journal's **earlier dated entries keep their original positional refs** (`§P3.7
 etc.) — they are historical and resolve via [`action_plan_aliases.md`](action_plan_aliases.md). New
 entries use the new IDs.
 
+- **2026-10-06 — SCN-19 DONE: scenario jobs are built, and the cut came with them.** The owner
+  answered the intake finding the direct way — "cut with the implementation" — so the task
+  was re-narrowed on the spot: `catalog-v1.12.0` lands in the same commit as the code, and
+  the WB7 sitting measures against a cut contract rather than gating it (a breach of a
+  published ceiling becomes a patch). The implementation is the design with no surprises:
+  the lock is one `asyncio.Lock` per room taken without waiting, and the one place it could
+  have gone wrong — the moment between "is it held?" and "take it" — has no suspension
+  point by construction; phases are planned exactly when the old code planned them, so the
+  REL-3 test for the ARC order passes untouched and a test now proves a second request is
+  refused before the first chain reaches its second step. The record is served, the events
+  ride the existing stream in execution order, and the SSE manager finally stops waiting for
+  a subscriber that stopped reading. The golden did not move — the hash is v1.11.0's, pinned
+  in a test alongside a byte comparison against the tag — which is the whole reason this cut
+  is a minor. Two things found on the way: the `202` from `wait: false` is only honoured
+  when the request truly suspends (an in-loop test client had to be nudged — not a
+  production concern, uvicorn always suspends), and Python 3.11's `wait_for` quietly
+  swallows a cancellation that lands exactly as its inner call completes, so the shutdown
+  test parks the chain inside a held dispatch. Voice and commons owe a re-pin; the UI
+  stepper is UI-24; the sitting is still owed and its checklist is in the spec.
+
 - **2026-10-06 — SCN-19 intake: the consumer's review is in the spec; the reconciliation
   found a contradiction in the entry itself.** Voice approved the job design with four changes,
   all folded into `scenario_jobs.md` verbatim: a `202`'s `success: true` means accepted, never

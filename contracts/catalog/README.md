@@ -65,6 +65,16 @@ stamp and the tag are the machine-readable authority.
   (the ceiling for a switch from any state of the room, derived from the planners).
   Schema: two optional fields; golden: 27 capabilities and 19 scenario values gained a
   number, 9 values gained labels, 6 labels changed.
+- **v1.12.0** — the guide gained *Jobs*: a scenario switch runs as one job per room.
+  `scenario.set` / `scenario.off` with `wait: false` answer `202` with a `job_id` and the
+  target's `max_duration_ms` (accepted, not done); a second request while a job runs is
+  refused with `409` and the new error code `job_in_progress` (`CanonicalError.job_id`
+  names the running job); `GET /scenario/jobs/{job_id}` and `GET /scenario/jobs?room=`
+  serve the record; the scenarios event stream gained `scenario_job_started`,
+  `scenario_phase` and `scenario_step`, and the terminal `scenario_switched` /
+  `scenario_shutdown` events carry the job's id, state, duration and failures. Schema:
+  two operations, the job and event schemas, one enum value, optional fields on the
+  canonical error and the REST scenario models; golden byte-identical.
 
 ## Regeneration
 

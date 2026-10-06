@@ -6,6 +6,7 @@
 // Controls without a canonical annotation (e.g. list queries) fall back to the legacy
 // per-device /action dispatch via sourceDeviceId.
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLogStore } from '../stores/useLogStore';
 import { useExecuteCanonicalAction, useExecuteDeviceAction, useScenarioLayout, useScenarioState, useSwitchScenario, useShutdownScenario } from '../hooks/useApi';
 import { useSettingsStore } from '../stores/useSettingsStore';
@@ -14,8 +15,20 @@ import { RemoteControlLayout } from './RemoteControlLayout';
 import { ForceReconcileDialog } from './ForceReconcileDialog';
 import { manifestToDeviceStructure } from '../lib/layoutManifestAdapter';
 
+/** The 409 `job_in_progress` of either door — canonical (`detail.error.job_id`) or REST
+ *  (`detail.job_id`) — or null for any other failure. */
+function describeJobInProgress(error: unknown): { jobId: string; code: 'job_in_progress' } | null {
+  const detail = (error as { response?: { status?: number; data?: { detail?: unknown } } })?.response;
+  if (detail?.status !== 409) return null;
+  const body = detail.data?.detail as { code?: string; job_id?: string; error?: { code?: string; job_id?: string } } | undefined;
+  if (body?.error?.code === 'job_in_progress' && body.error.job_id) return { jobId: body.error.job_id, code: 'job_in_progress' };
+  if (body?.code === 'job_in_progress' && body.job_id) return { jobId: body.job_id, code: 'job_in_progress' };
+  return null;
+}
+
 export function RuntimeScenarioPage({ scenarioId }: { scenarioId: string }) {
   const { addLog } = useLogStore();
+  const queryClient = useQueryClient();
   const executeAction = useExecuteDeviceAction();
   const executeCanonical = useExecuteCanonicalAction();
   // Power-on routes through /scenario/switch (not /scenario/start) so it handles both cold-start
@@ -67,6 +80,18 @@ export function RuntimeScenarioPage({ scenarioId }: { scenarioId: string }) {
     return map;
   }, [manifest]);
 
+  // Scenario jobs (contract v1.12): one job per room — a second lifecycle request while
+  // one runs is refused with 409 `job_in_progress` (before this the second call silently
+  // double-ran the chain). Say so, and re-read the room: the running job's terminal event
+  // lands on /events/scenarios and the state queries refresh from there.
+  const onScenarioJobRefused = (error: unknown) => {
+    const refused = describeJobInProgress(error);
+    if (!refused) return;
+    addLog({ level: 'warn', message: `A scenario switch is already running in this room (${refused.jobId}) — wait for it to finish`, details: refused });
+    void queryClient.invalidateQueries({ queryKey: ['scenario', 'state'] });
+    void queryClient.invalidateQueries({ queryKey: ['scenarios', 'state'] });
+  };
+
   const handleAction = (action: string, payload?: any, targetDeviceId?: string) => {
     const params =
       payload === undefined || payload === null || (Array.isArray(payload) && payload.length === 0)
@@ -79,18 +104,24 @@ export function RuntimeScenarioPage({ scenarioId }: { scenarioId: string }) {
     // without a canonical entity (older bridge).
     if (action === 'power_on') {
       if (canonicalEntityId) {
-        executeCanonical.mutate({ deviceId: canonicalEntityId, request: { capability: 'scenario', action: 'set', params: { value: scenarioId }, wait: true } });
+        executeCanonical.mutate(
+          { deviceId: canonicalEntityId, request: { capability: 'scenario', action: 'set', params: { value: scenarioId }, wait: true } },
+          { onError: onScenarioJobRefused },
+        );
       } else {
-        switchScenario.mutate({ id: scenarioId, graceful: true });
+        switchScenario.mutate({ id: scenarioId, graceful: true, wait: true }, { onError: onScenarioJobRefused });
       }
       addLog({ level: 'info', message: `Starting scenario: ${scenarioId}`, details: params });
       return;
     }
     if (action === 'power_off') {
       if (canonicalEntityId) {
-        executeCanonical.mutate({ deviceId: canonicalEntityId, request: { capability: 'scenario', action: 'off', wait: true } });
+        executeCanonical.mutate(
+          { deviceId: canonicalEntityId, request: { capability: 'scenario', action: 'off', wait: true } },
+          { onError: onScenarioJobRefused },
+        );
       } else {
-        shutdownScenario.mutate({ scenarioId, graceful: true });
+        shutdownScenario.mutate({ scenarioId, graceful: true }, { onError: onScenarioJobRefused });
       }
       addLog({ level: 'info', message: `Shutting down scenario: ${scenarioId}`, details: params });
       return;

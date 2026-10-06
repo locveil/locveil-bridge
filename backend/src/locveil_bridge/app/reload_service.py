@@ -59,6 +59,7 @@ class ReloadService:
         rewire_fleet: Callable[[MQTTClient, WBVirtualDeviceService], Awaitable[None]],
         rebuild_scenario_cards: Callable[[MQTTClient, WBVirtualDeviceService], Awaitable[None]],
         publish_catalog_version: Callable[[], Awaitable[None]],
+        wait_for_scenario_jobs: Optional[Callable[[], Awaitable[bool]]] = None,
     ):
         self._config_manager = config_manager
         self._device_manager = device_manager
@@ -67,6 +68,9 @@ class ReloadService:
         self._rewire_fleet = rewire_fleet
         self._rebuild_scenario_cards = rebuild_scenario_cards
         self._publish_catalog_version = publish_catalog_version
+        # SCN-19: block (bounded) on running scenario jobs before tearing anything
+        # down — bootstrap passes ScenarioManager.wait_for_jobs.
+        self._wait_for_scenario_jobs = wait_for_scenario_jobs
         # The current live client — seeded by bootstrap at startup, swapped
         # here on every reload.
         self.mqtt_client: Optional[MQTTClient] = None
@@ -74,6 +78,9 @@ class ReloadService:
     async def reload(self) -> None:
         """Reload configurations and device modules (background task)."""
         try:
+            if self._wait_for_scenario_jobs is not None:
+                await self._wait_for_scenario_jobs()
+
             if self.mqtt_client:
                 await self.mqtt_client.stop()
 

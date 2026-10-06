@@ -103,6 +103,37 @@ conversation.
   running consumer re-fetches; the contract does not change. The numbers describe how long
   the bridge is prepared to wait, not how fast a device is.
 
+## Jobs (since contract v1.12)
+
+A scenario switch is a chain of device steps that can take most of a minute. A consumer
+that does not want to hold a request open for that long starts it as a job and follows it.
+
+- **Starting a job.** `scenario.set(value)` or `scenario.off` on a room's scenario manager
+  with `wait: false` returns `202` and, in `state`, a `job_id` and the `max_duration_ms`
+  of the target — the `202` means the job was accepted, not that it is done. With
+  `wait: true` (the default) the same request returns when the chain has finished, as
+  before, and `state` also names the `job_id`. A request that finds the room already at
+  the target returns `200` with `no_op: true` and starts nothing.
+- **One job per room.** While a job runs in a room, every further scenario request for
+  that room is refused with `409` and the error code `job_in_progress`; the error names
+  the running `job_id`. Nothing is queued: a repeated request never runs the chain twice,
+  and a stop during a switch is a refusal, not an interruption. There is no cancel — a
+  stop is a new job, started after the running one has finished.
+- **Following a job.** `GET /scenario/jobs/{job_id}` returns the job: its phases, every
+  step with its status, failures, and the result; after a bridge restart every earlier
+  job is unknown (`404`, `job_unknown`) — the bridge does not pretend to know what a chain
+  it did not finish left behind; `GET /scenario/state` says what is active now. The
+  scenarios event stream carries the same facts as they happen: `scenario_job_started`,
+  `scenario_phase` (a phase's planned steps), `scenario_step` (a step starting, then
+  `done`, `failed` or `not_confirmed`), and the terminal `scenario_switched` or
+  `scenario_shutdown`, which carries the `job_id`, the job's state, its duration and its
+  failures. Every job emits its start first and exactly one terminal event last, in
+  execution order; the stream is not replayed on reconnect — the job record is the truth.
+- **What the events are not.** They carry device ids and canonical values, never words:
+  a consumer that narrates a step takes the device's name from the catalog. Device-level
+  actions (a volume step, a power command on one device) are not jobs; they confirm within
+  the capability's `confirm_timeout_ms` as before.
+
 ## Versioning
 
 The contract is versioned as a whole, `MAJOR.MINOR.PATCH`. Two things carry a version

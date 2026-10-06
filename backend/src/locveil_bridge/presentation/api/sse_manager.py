@@ -70,6 +70,8 @@ class SSEManager(EventPublisherPort):
             SSEChannel.SYSTEM: set()
         }
         self._connection_lock = asyncio.Lock()
+        # Connections dropped for not draining (SCN-19 §6.7); their generators end.
+        self._dropped: Set[asyncio.Queue] = set()
         self._shutdown_event = asyncio.Event()
         self._is_shutting_down = False
         # Track active event generator tasks for proper cleanup
@@ -112,6 +114,7 @@ class SSEManager(EventPublisherPort):
         """Remove an SSE connection from a channel"""
         async with self._connection_lock:
             self._connections[channel].discard(queue)
+            self._dropped.discard(queue)
             logger.info(f"SSE connection removed from {channel.value} channel. Total: {len(self._connections[channel])}")
     
     async def publish_device_event(
@@ -138,11 +141,23 @@ class SSEManager(EventPublisherPort):
         
         logger.debug(f"Broadcasting {event_type} event to {len(connections)} connections on {channel.value} channel")
         
-        # Send to all active connections
+        # Send to all active connections — NON-blocking (SCN-19 §6.7): a subscriber whose
+        # queue is full is dropped, never waited for. The old `await queue.put` would
+        # have stalled the producer — the scenario executor among them — on one slow
+        # consumer, i.e. a stalled voice box could pace the house. The dropped
+        # subscriber's generator sees the poison marker, ends its stream, and the
+        # consumer reconnects + re-reads its truth (GET /scenario/jobs/{id}).
         dead_connections = set()
         for queue in connections:
             try:
-                await queue.put(formatted_event)
+                queue.put_nowait(formatted_event)
+            except asyncio.QueueFull:
+                logger.warning(
+                    f"SSE subscriber on {channel.value} is not draining "
+                    f"(queue of {queue.maxsize} full) — dropping the connection"
+                )
+                dead_connections.add(queue)
+                self._poison(queue)
             except Exception as e:
                 logger.warning(f"Failed to send event to connection: {e}")
                 dead_connections.add(queue)
@@ -153,6 +168,14 @@ class SSEManager(EventPublisherPort):
                 for dead_queue in dead_connections:
                     self._connections[channel].discard(dead_queue)
             logger.info(f"Removed {len(dead_connections)} dead connections from {channel.value} channel")
+
+    def _poison(self, queue: asyncio.Queue) -> None:
+        """Mark a connection dropped (§6.7); its generator ends the stream on its next
+        turn instead of serving the undrained backlog."""
+        self._dropped.add(queue)
+
+    def is_dropped(self, queue: asyncio.Queue) -> bool:
+        return queue in self._dropped
     
     async def get_channel_stats(self) -> Dict[str, int]:
         """Get connection statistics for all channels"""
@@ -256,6 +279,9 @@ class SSEManager(EventPublisherPort):
 
                     try:
                         # Try to get an event from the queue with a short timeout
+                        if queue in self._dropped:
+                            logger.info(f"Closing a dropped (slow) {channel.value} SSE connection")
+                            break
                         try:
                             event_data = await asyncio.wait_for(queue.get(), timeout=1.0)
                             yield event_data

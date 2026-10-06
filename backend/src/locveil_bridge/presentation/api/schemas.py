@@ -116,14 +116,18 @@ class CanonicalActionRequest(BaseModel):
         default=True,
         description="Wait for the value-topic echo and return post-action state (voice wants "
                     "a speakable result). False = fire-and-return-current-state (the UI's "
-                    "mash-click mode — button presses must not serialize on echo waits).",
+                    "mash-click mode — button presses must not serialize on echo waits). "
+                    "On a Scenario Manager's `scenario` capability `wait: false` returns `202` "
+                    "with a job to follow (since contract v1.12).",
     )
 
 
 class CanonicalErrorCode(str, Enum):
     """Structured error codes for the canonical endpoint. HTTP status mirrors these
     (see /devices/{id}/canonical responses): 404 for the three 'not supported' codes,
-    400 for param_invalid, 503 for device_unreachable, 500 for internal_error."""
+    400 for param_invalid, 503 for device_unreachable, 500 for internal_error,
+    409 for job_in_progress (a scenario job is already running in the room; the error
+    names it in `job_id`)."""
     DEVICE_NOT_FOUND = "device_not_found"
     CAPABILITY_NOT_SUPPORTED = "capability_not_supported"
     ACTION_NOT_SUPPORTED = "action_not_supported"
@@ -140,14 +144,24 @@ class CanonicalErrorCode(str, Enum):
     NO_GROUP_MEMBERS = "no_group_members"
     NO_DEFAULT_DEVICE = "no_default_device"
     FANOUT_NOT_ALLOWED = "fanout_not_allowed"
+    # Scenario jobs (since contract v1.12): one job per room — a second scenario request
+    # while one runs is refused (409), never queued; the error names the running job.
+    JOB_IN_PROGRESS = "job_in_progress"
 
 
 class CanonicalError(BaseModel):
-    """Error envelope. `field` + `reason` populated for param_invalid; both optional."""
+    """Error envelope. `field` + `reason` populated for param_invalid; both optional.
+    `job_id` is set for `job_in_progress` only — the running job the caller may follow."""
     code: CanonicalErrorCode
     message: str
     field: Optional[str] = None
     reason: Optional[str] = None
+    job_id: Optional[str] = Field(
+        default=None,
+        description="For `job_in_progress`: the id of the scenario job already running in "
+                    "the room (follow it via GET /scenario/jobs/{job_id} or the scenarios "
+                    "event stream).",
+    )
 
 
 class CanonicalActionResponse(BaseModel):
@@ -173,6 +187,202 @@ class CanonicalActionResponse(BaseModel):
                     "be wrong); the UI offers a re-tap that re-sends with params.force=true. "
                     "Distinct from plain no_op, which reflects a feedback-verified value.",
     )
+
+
+# ---- Scenario jobs (since contract v1.12) ---------------------------------------
+# The record GET /scenario/jobs/{job_id} serves, the 202 acceptance body of the REST
+# routers, and the payloads of the scenarios event stream (registered in the OpenAPI
+# schema through OPENAPI_EXTRA_MODELS — SSE has no operation to hang them on).
+
+class ScenarioJobStep(BaseModel):
+    """One planned device step of a job phase, with its execution status."""
+    index: int = Field(..., description="Position of the step within its phase (0-based).")
+    device_id: str
+    domain: str = Field(..., description="`power` or `input`.")
+    target: Any = Field(default=None, description="The canonical value the step drives the domain to.")
+    command: str = Field(..., description="The device's native command.")
+    zone: Optional[str] = Field(default=None, description="Power zone, for multi-zone devices.")
+    feedback: bool = Field(default=False, description="Whether the step is confirmed by polling the device's reported state.")
+    poll_timeout_ms: Optional[int] = Field(default=None, description="How long a feedback step is polled before it counts as not confirmed.")
+    delay_ms: int = Field(default=0, description="Settle wait after a no-feedback step.")
+    pre_delay_ms: int = Field(default=0, description="Wait before the step (from a topology ordering edge).")
+    status: Literal["pending", "running", "done", "failed", "not_confirmed"] = "pending"
+    started_at: Optional[str] = Field(default=None, description="ISO-8601 UTC.")
+    finished_at: Optional[str] = Field(default=None, description="ISO-8601 UTC.")
+    error: Optional[str] = Field(default=None, description="The executor's error text for a failed or unconfirmed step.")
+
+
+class ScenarioJobManualStep(BaseModel):
+    node: str
+    instruction: str
+
+
+class ScenarioJobPhase(BaseModel):
+    """A phase of the chain — `teardown` (powering the outgoing devices down) or
+    `activation` (bringing the incoming scenario up in topology order)."""
+    phase: Literal["teardown", "activation"]
+    steps: List[ScenarioJobStep]
+    manual_steps: List[ScenarioJobManualStep] = Field(default_factory=list)
+
+
+class ScenarioJob(BaseModel):
+    """One run of a room's scenario chain: a switch, a stop or a one-device reconcile.
+    Kept in memory for the running job and the last 20 finished ones per room; after a
+    bridge restart every earlier job is unknown (`404`, `job_unknown`)."""
+    job_id: str
+    room_id: str
+    kind: Literal["switch", "stop", "reconcile"]
+    target: str = Field(..., description="The scenario id, or `none` for a stop.")
+    from_: str = Field(..., alias="from", description="The room's active scenario at acceptance (`none` if idle).")
+    source: Literal["canonical", "rest", "wb_card"] = Field(..., description="Which door started the job.")
+    state: Literal["running", "succeeded", "failed"] = Field(
+        ..., description="`failed` = the chain completed with at least one step failed or not confirmed.")
+    max_duration_ms: int = Field(..., description="The catalog's published ceiling for the target.")
+    started_at: str = Field(..., description="ISO-8601 UTC, at acceptance.")
+    finished_at: Optional[str] = Field(default=None, description="ISO-8601 UTC, at the terminal event.")
+    duration_ms: Optional[int] = Field(default=None, description="Wall time from acceptance to the terminal event.")
+    phases: List[ScenarioJobPhase] = Field(default_factory=list, description="Phases appear as they are planned.")
+    failures: List[Dict[str, Any]] = Field(default_factory=list, description="`{device, command, error}` per failed or unconfirmed step.")
+    powered_off: List[str] = Field(default_factory=list, description="Devices the teardown powered off.")
+    result_scenario: Optional[str] = Field(default=None, description="The room's active scenario after the job (`none` after a stop).")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ScenarioJobAccepted(BaseModel):
+    """The `202` body of a REST scenario request with `wait: false`."""
+    job_id: str
+    room_id: str
+    kind: Literal["switch", "stop", "reconcile"]
+    target: str
+    max_duration_ms: int
+
+
+class ScenarioRoomJobs(BaseModel):
+    """A room's running job and its most recent finished ones, newest first."""
+    room_id: str
+    running: Optional[ScenarioJob] = None
+    recent: List[ScenarioJob] = Field(default_factory=list)
+
+
+class ScenarioJobsByRoom(BaseModel):
+    rooms: Dict[str, ScenarioRoomJobs]
+
+
+class ScenarioJobInProgressDetail(BaseModel):
+    """The `detail` of a REST `409` when a job is running in the room."""
+    code: Literal["job_in_progress"] = "job_in_progress"
+    room_id: str
+    job_id: str
+    kind: Literal["switch", "stop", "reconcile"]
+    target: str
+
+
+class ScenarioJobUnknownDetail(BaseModel):
+    """The `detail` of `GET /scenario/jobs/{job_id}` `404` — including every id from
+    before the last bridge restart."""
+    code: Literal["job_unknown"] = "job_unknown"
+    job_id: str
+
+
+class ScenarioJobInProgressResponse(BaseModel):
+    """REST `409` body while a job runs in the room."""
+    detail: ScenarioJobInProgressDetail
+
+
+class ScenarioJobUnknownResponse(BaseModel):
+    """`GET /scenario/jobs/{job_id}` `404` body."""
+    detail: ScenarioJobUnknownDetail
+
+
+# Event payloads of GET /events/scenarios. Every frame carries `eventType`; the job
+# events carry `job_id` + `room_id`; `timestamp` is ISO-8601 UTC.
+
+class ScenarioJobStartedEvent(BaseModel):
+    """Once per job, before any device is touched."""
+    eventType: Literal["scenario_job_started"] = "scenario_job_started"
+    job_id: str
+    room_id: str
+    kind: Literal["switch", "stop", "reconcile"]
+    target: str
+    from_: str = Field(..., alias="from")
+    source: Literal["canonical", "rest", "wb_card"]
+    max_duration_ms: int
+    timestamp: str
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ScenarioPhasePlannedStep(BaseModel):
+    index: int
+    device_id: str
+    domain: str
+    target: Any = None
+    command: str
+    zone: Optional[str] = None
+    feedback: bool = False
+    poll_timeout_ms: Optional[int] = None
+    delay_ms: int = 0
+    pre_delay_ms: int = 0
+
+
+class ScenarioPhaseEvent(BaseModel):
+    """Once per phase, when the phase is planned: its steps and the manual steps it
+    needs from a person."""
+    eventType: Literal["scenario_phase"] = "scenario_phase"
+    job_id: str
+    room_id: str
+    phase: Literal["teardown", "activation"]
+    steps: List[ScenarioPhasePlannedStep]
+    manual_steps: List[ScenarioJobManualStep] = Field(default_factory=list)
+    timestamp: str
+
+
+class ScenarioStepEvent(BaseModel):
+    """Twice per step: `started` just before dispatch, then `done`, `failed` or
+    `not_confirmed` after the step's confirmation gate. `elapsed_ms` is since acceptance."""
+    eventType: Literal["scenario_step"] = "scenario_step"
+    job_id: str
+    room_id: str
+    phase: Literal["teardown", "activation"]
+    index: int
+    device_id: str
+    domain: str
+    target: Any = None
+    command: str
+    zone: Optional[str] = None
+    status: Literal["started", "done", "failed", "not_confirmed"]
+    error: Optional[str] = None
+    elapsed_ms: int
+    timestamp: str
+
+
+class ScenarioSwitchedEvent(BaseModel):
+    """The terminal event of a switch or a reconcile job (and the tracking notification
+    of a startup restore, which carries no `job_id`)."""
+    eventType: Literal["scenario_switched"] = "scenario_switched"
+    scenario_id: str
+    room_id: str
+    timestamp: str
+    state: Optional[Dict[str, Any]] = Field(default=None, description="The scenario's `ScenarioState`.")
+    job_id: Optional[str] = None
+    job_state: Optional[Literal["succeeded", "failed"]] = None
+    duration_ms: Optional[int] = None
+    failures: Optional[List[Dict[str, Any]]] = None
+    powered_off: Optional[List[str]] = None
+
+
+class ScenarioShutdownEvent(BaseModel):
+    """The terminal event of a stop job."""
+    eventType: Literal["scenario_shutdown"] = "scenario_shutdown"
+    scenario_id: Optional[str] = None
+    room_id: str
+    timestamp: str
+    job_id: Optional[str] = None
+    job_state: Optional[Literal["succeeded", "failed"]] = None
+    duration_ms: Optional[int] = None
+    failures: Optional[List[Dict[str, Any]]] = None
+    powered_off: Optional[List[str]] = None
 
 
 # ---- POST /rooms/{room_id}/canonical (VWB-23, canonical_first.md §10) -------------

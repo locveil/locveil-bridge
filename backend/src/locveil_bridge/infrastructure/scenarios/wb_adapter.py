@@ -19,6 +19,7 @@ import logging
 from typing import Any, Dict
 
 from locveil_bridge.domain.ports import MessageBusPort
+from locveil_bridge.domain.scenarios.jobs import ScenarioJobInProgress
 from locveil_bridge.domain.scenarios.proxy import (
     NO_SCENARIO,
     ScenarioProxy,
@@ -87,10 +88,13 @@ class ScenarioWBAdapter:
             try:
                 if control_name == "scenario":
                     value = (params or {}).get("value") or payload
+                    # SCN-19: the card is a door onto the room's job lock like any other;
+                    # a busy room refuses (ScenarioJobInProgress) and the card's value is
+                    # re-published by the running job's terminal notification.
                     if value == NO_SCENARIO:
-                        await self.proxy.deactivate(room_id)
+                        await self.proxy.deactivate(room_id, source="wb_card")
                     else:
-                        await self.proxy.activate(room_id, value)
+                        await self.proxy.activate(room_id, value, source="wb_card")
                     return
                 mapped = _CONTROL_ACTIONS.get(control_name)
                 if mapped is None:
@@ -105,6 +109,9 @@ class ScenarioWBAdapter:
             except ScenarioProxyError as e:
                 # WB has no error channel for a card write; log loudly and move on.
                 logger.warning(f"Scenario card '{room_id}': {control_name} rejected: {e}")
+            except ScenarioJobInProgress as e:
+                # The room is busy: the card write is refused, never queued (SCN-19 §4).
+                logger.warning(f"Scenario card '{room_id}': {control_name} refused — {e}")
             except Exception as e:
                 logger.error(f"Scenario card '{room_id}': {control_name} failed: {e}")
 

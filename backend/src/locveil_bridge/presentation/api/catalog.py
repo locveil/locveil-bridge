@@ -49,7 +49,7 @@ from locveil_bridge.presentation.api.schemas import (
 # at runtime. When a config change moves the committed golden, bump the PATCH level here
 # and regenerate — the STAMP.json beside the golden carries the value, and the tag is
 # cut on the same commit.
-CONTRACT_VERSION = "1.11.0"
+CONTRACT_VERSION = "1.12.0"
 
 
 def _by_value_labels(act: Optional[Any]) -> Optional[dict]:

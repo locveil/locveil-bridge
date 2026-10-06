@@ -71,7 +71,10 @@ class _MockScenarioManager:
         }
         self.active: dict[str, object] = {}  # room_id -> Scenario (per-room since SCN-6)
         self._live_state: ScenarioState | None = None
-        self.switch_scenario = AsyncMock()
+        # SCN-19: the chokepoint answers the job result dict (`job_id` rides the response).
+        self.switch_scenario = AsyncMock(return_value={
+            "success": True, "powered_off": [], "failures": [], "job_id": "j-test-0001", "no_op": False,
+        })
         self.execute_role_action = AsyncMock(return_value={"status": "success"})
         self.start_scenario = AsyncMock()
         self.shutdown = AsyncMock()
@@ -195,6 +198,7 @@ def test_switch_scenario_success(client, mock_scenario_manager):
     body = response.json()
     assert body["status"] == "success"
     assert "reading_mode" in body["message"]
+    assert body["job_id"] == "j-test-0001"
     mock_scenario_manager.switch_scenario.assert_awaited_once_with("reading_mode", graceful=True)
 
 
